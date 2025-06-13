@@ -2,9 +2,11 @@
 
 import React, { use } from 'react';
 import {
-  Avatar,
   Box,
   Button,
+  IconButton,
+  Menu,
+  MenuItem,
   Paper,
   Table,
   TableBody,
@@ -12,9 +14,13 @@ import {
   TableContainer,
   TableHead,
   TablePagination,
-  TableRow, TextField,
+  TableRow,
+  TextField,
   Typography,
 } from '@mui/material';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
 
 export default function TestCasesPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = use(params);
@@ -29,6 +35,15 @@ export default function TestCasesPage({ params }: { params: Promise<{ projectId:
   const handleChangeRowsPerPage = (e: React.ChangeEvent<HTMLInputElement>) => {
     setRowsPerPage(parseInt(e.target.value, 10));
     setPage(0);
+  };
+
+  const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
+  const open = Boolean(anchorEl);
+  const handleClick = (event: React.MouseEvent<HTMLElement>) => {
+    setAnchorEl(event.currentTarget);
+  };
+  const handleClose = () => {
+    setAnchorEl(null);
   };
 
   return (
@@ -59,6 +74,7 @@ export default function TestCasesPage({ params }: { params: Promise<{ projectId:
                 <TableCell>Дата обновления</TableCell>
                 <TableCell>Время прохождения</TableCell>
                 <TableCell>Кол-во кейсов</TableCell>
+                <TableCell sx={{ width: '30px' }}></TableCell>
               </TableRow>
             </TableHead>
             <TableBody color="background.paper">
@@ -68,6 +84,21 @@ export default function TestCasesPage({ params }: { params: Promise<{ projectId:
                 <TableCell>testewts</TableCell>
                 <TableCell>testewts</TableCell>
                 <TableCell>testewts</TableCell>
+                <TableCell>
+                  <IconButton onClick={handleClick} sx={{ p: 0 }}>
+                    <MoreVertIcon sx={{ color: 'white' }} />
+                  </IconButton>
+                  <Menu anchorEl={anchorEl} open={open} onClose={handleClose}>
+                    <MenuItem onClick={handleClose}>
+                      <EditIcon />
+                      Изменить
+                    </MenuItem>
+                    <MenuItem onClick={handleClose}>
+                      <DeleteIcon />
+                      Удалить
+                    </MenuItem>
+                  </Menu>
+                </TableCell>
               </TableRow>
               <TableRow hover>
                 <TableCell>testewts</TableCell>
@@ -75,6 +106,21 @@ export default function TestCasesPage({ params }: { params: Promise<{ projectId:
                 <TableCell>testewts</TableCell>
                 <TableCell>testewts</TableCell>
                 <TableCell>testewts</TableCell>
+                <TableCell>
+                  <IconButton onClick={handleClick} sx={{ p: 0 }}>
+                    <MoreVertIcon sx={{ color: 'white' }} />
+                  </IconButton>
+                  <Menu anchorEl={anchorEl} open={open} onClose={handleClose}>
+                    <MenuItem onClick={handleClose}>
+                      <EditIcon />
+                      Изменить
+                    </MenuItem>
+                    <MenuItem onClick={handleClose}>
+                      <DeleteIcon />
+                      Удалить
+                    </MenuItem>
+                  </Menu>
+                </TableCell>
               </TableRow>
               <TableRow hover>
                 <TableCell>testewts</TableCell>
@@ -82,6 +128,21 @@ export default function TestCasesPage({ params }: { params: Promise<{ projectId:
                 <TableCell>testewts</TableCell>
                 <TableCell>testewts</TableCell>
                 <TableCell>testewts</TableCell>
+                <TableCell>
+                  <IconButton onClick={handleClick} sx={{ p: 0 }}>
+                    <MoreVertIcon sx={{ color: 'white' }} />
+                  </IconButton>
+                  <Menu anchorEl={anchorEl} open={open} onClose={handleClose}>
+                    <MenuItem onClick={handleClose}>
+                      <EditIcon />
+                      Изменить
+                    </MenuItem>
+                    <MenuItem onClick={handleClose}>
+                      <DeleteIcon />
+                      Удалить
+                    </MenuItem>
+                  </Menu>
+                </TableCell>
               </TableRow>
             </TableBody>
           </Table>

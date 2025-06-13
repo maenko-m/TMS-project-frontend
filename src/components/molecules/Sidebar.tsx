@@ -97,9 +97,7 @@ export default function Sidebar({ projectId }: { projectId: string }) {
             }}
           >
             <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ p: 0, background: 'none' }}>
-              <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                ТЕСТЫ
-              </Typography>
+              <Typography variant="h6">Тесты</Typography>
             </AccordionSummary>
             <AccordionDetails sx={{ p: 0, background: 'none' }}>
               <List component="nav">
@@ -131,9 +129,7 @@ export default function Sidebar({ projectId }: { projectId: string }) {
             }}
           >
             <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ p: 0, background: 'none' }}>
-              <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                ВЫПОЛНЕНИЕ
-              </Typography>
+              <Typography variant="h6">Выполнениие</Typography>
             </AccordionSummary>
             <AccordionDetails sx={{ p: 0, background: 'none' }}>
               <List component="nav">
@@ -178,9 +174,7 @@ export default function Sidebar({ projectId }: { projectId: string }) {
             }}
           >
             <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ p: 0, background: 'none' }}>
-              <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                ПРОЧЕЕ
-              </Typography>
+              <Typography variant="h6">Прочее</Typography>
             </AccordionSummary>
             <AccordionDetails sx={{ p: 0, background: 'none' }}>
               <List component="nav">
