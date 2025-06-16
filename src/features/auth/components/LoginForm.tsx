@@ -3,15 +3,24 @@
 import React from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { TextField, Button, Box, Typography, Alert } from '@mui/material';
+import { TextField, Button, Box, Typography } from '@mui/material';
 import { useAuth } from '@/hooks/useAuth';
 import { loginSchema } from '@/utils/validators';
 import { LoginInput } from '../types';
-import { useState } from 'react';
+import AppSnackbar from '@/components/atoms/AppSnackbar';
 
 export function LoginForm() {
+  const [snackbar, setSnackbar] = React.useState({
+    open: false,
+    message: '',
+    severity: 'info' as 'success' | 'error' | 'info' | 'warning',
+  });
+
+  const showSnackbar = (message: string, severity: typeof snackbar.severity = 'info') => {
+    setSnackbar({ open: true, message, severity });
+  };
+
   const { login } = useAuth();
-  const [error, setError] = useState<string | null>(null);
   const {
     register,
     handleSubmit,
@@ -23,9 +32,8 @@ export function LoginForm() {
   const onSubmit = async (data: LoginInput) => {
     try {
       await login(data.email, data.password);
-      setError(null);
     } catch {
-      setError('Неверная почта или пароль');
+      showSnackbar('Неверная почта или пароль', 'error');
     }
   };
 
@@ -46,10 +54,15 @@ export function LoginForm() {
         borderRadius: 2,
       }}
     >
+      <AppSnackbar
+        open={snackbar.open}
+        message={snackbar.message}
+        severity={snackbar.severity}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+      />
       <Typography variant="h2" textAlign="center">
         Войти в систему
       </Typography>
-      {error && <Alert severity="error">{error}</Alert>}
       <TextField
         label="Почта"
         type="email"

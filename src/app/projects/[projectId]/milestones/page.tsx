@@ -1,28 +1,27 @@
 'use client';
 
-import React, { use } from 'react';
+import React from 'react';
 import {
   Box,
   Button,
-  FormControl,
   IconButton,
-  InputLabel,
   Menu,
   MenuItem,
   Modal,
   Paper,
-  Select,
-  SelectChangeEvent,
   Stack,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
-  TablePagination,
   TableRow,
   TextField,
   Typography,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
@@ -31,176 +30,219 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import CloseIcon from '@mui/icons-material/Close';
+import { gql, useQuery, useMutation } from '@apollo/client';
+import { use } from 'react';
+import AppSnackbar from '@/components/atoms/AppSnackbar';
 
-export default function TestCasesPage({ params }: { params: Promise<{ projectId: string }> }) {
+const MILESTONES_QUERY = gql`
+  query milestonesByProjectId($projectId: UUID!, $filter: MilestoneFilterInput) {
+    milestonesByProjectId(projectId: $projectId, filter: $filter) {
+      nodes {
+        id
+        name
+        description
+        dueDate
+        testRunsCount
+      }
+    }
+  }
+`;
+
+const CREATE_MILESTONE = gql`
+  mutation createMilestone($input: MilestoneCreateInput!) {
+    createMilestone(input: $input)
+  }
+`;
+
+const UPDATE_MILESTONE = gql`
+  mutation updateMilestone($id: UUID!, $input: MilestoneUpdateInput!) {
+    updateMilestone(id: $id, input: $input)
+  }
+`;
+
+const DELETE_MILESTONE = gql`
+  mutation deleteMilestone($id: UUID!) {
+    deleteMilestone(id: $id)
+  }
+`;
+
+type Milestone = {
+  id: string;
+  name: string;
+  description: string;
+  dueDate: string;
+  testRunsCount: number;
+};
+
+type MilestoneFormData = {
+  id?: string;
+  name?: string;
+  description?: string;
+  dueDate?: Date | null;
+};
+
+export default function MilestonesPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = use(params);
+  const [search, setSearch] = React.useState('');
 
-  const [milestoneFormOpen, setMilestoneFormOpen] = React.useState(false);
-  const [milestoneFormData, setMilestoneFormData] = React.useState({
-    title: '',
-    description: '',
-    status: 'active',
-    dueDate: null as Date | null,
+  const { data, refetch } = useQuery(MILESTONES_QUERY, {
+    variables: { projectId, filter: { name: search } },
   });
 
-  const handleMilestoneInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
-  ) => {
-    const { name, value } = e.target;
-    setMilestoneFormData((prev) => ({ ...prev, [name]: value }));
+  const [createMilestone] = useMutation(CREATE_MILESTONE);
+  const [updateMilestone] = useMutation(UPDATE_MILESTONE);
+  const [deleteMilestone] = useMutation(DELETE_MILESTONE);
+
+  const [formData, setFormData] = React.useState<MilestoneFormData>({});
+  const [modalOpen, setModalOpen] = React.useState(false);
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const [deleteId, setDeleteId] = React.useState<string | null>(null);
+  const [menuAnchor, setMenuAnchor] = React.useState<null | HTMLElement>(null);
+  const [selectedMilestone, setSelectedMilestone] = React.useState<Milestone | null>(null);
+
+  const openMenu = (event: React.MouseEvent<HTMLButtonElement>, milestone: Milestone) => {
+    setMenuAnchor(event.currentTarget);
+    setSelectedMilestone(milestone);
   };
 
-  const handleMilestoneSelectChange = (e: SelectChangeEvent) => {
-    const { name, value } = e.target;
-    setMilestoneFormData((prev) => ({ ...prev, [name]: value }));
+  const closeMenu = () => {
+    setMenuAnchor(null);
+    setSelectedMilestone(null);
   };
 
-  const handleMilestoneFormOpen = () => {
-    setMilestoneFormOpen(true);
-  };
-  const handleMilestoneFormClose = () => {
-    setMilestoneFormOpen(false);
-    setMilestoneFormData({ title: '', description: '', status: 'active', dueDate: null });
-  };
-
-  const handleMilestoneFormSubmit = () => {
-    console.log('Milestone submitted:', milestoneFormData);
-    handleMilestoneFormClose();
+  const openEdit = (m: Milestone) => {
+    setFormData({
+      id: m.id,
+      name: m.name,
+      description: m.description,
+      dueDate: new Date(m.dueDate),
+    });
+    setModalOpen(true);
+    closeMenu();
   };
 
-  const [page, setPage] = React.useState(0);
-  const [rowsPerPage, setRowsPerPage] = React.useState(5);
-
-  const handleChangePage = (e: unknown, newPage: number) => {
-    setPage(newPage);
+  const openNew = () => {
+    setFormData({ dueDate: null });
+    setModalOpen(true);
   };
 
-  const handleChangeRowsPerPage = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setRowsPerPage(parseInt(e.target.value, 10));
-    setPage(0);
+  const handleSubmit = async () => {
+    if (!formData.name || !formData.dueDate) return;
+    const input = {
+      projectId,
+      name: formData.name,
+      description: formData.description ?? '',
+      dueDate: formData.dueDate.toISOString(),
+    };
+    try {
+      if (formData.id) {
+        await updateMilestone({ variables: { id: formData.id, input } });
+      } else {
+        await createMilestone({ variables: { input } });
+      }
+      setModalOpen(false);
+      refetch();
+      showSnackbar('Успешно сохранено', 'success');
+    } catch (err) {
+      showSnackbar('Ошибка при сохранении', 'error');
+      console.error(err);
+    }
   };
 
-  const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
-  const open = Boolean(anchorEl);
-  const handleClick = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    try {
+      await deleteMilestone({ variables: { id: deleteId } });
+      setConfirmOpen(false);
+      setDeleteId(null);
+      refetch();
+      showSnackbar('Успешно удалено', 'success');
+    } catch (err) {
+      showSnackbar('Ошибка при удалении', 'error');
+      console.error(err);
+    }
   };
-  const handleClose = () => {
-    setAnchorEl(null);
+
+  const [snackbar, setSnackbar] = React.useState({
+    open: false,
+    message: '',
+    severity: 'info' as 'success' | 'error' | 'info' | 'warning',
+  });
+
+  const showSnackbar = (message: string, severity: typeof snackbar.severity = 'info') => {
+    setSnackbar({ open: true, message, severity });
   };
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', p: 3, gap: 3 }}>
+    <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <AppSnackbar
+        open={snackbar.open}
+        message={snackbar.message}
+        severity={snackbar.severity}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+      />
+      <Typography variant="h1">Вехи</Typography>
       <Box sx={{ display: 'flex', gap: 1 }}>
-        <Typography variant="h1">Вехи</Typography>
-      </Box>
-      <Box sx={{ display: 'flex', gap: 1 }}>
-        <Button variant="contained" size="small">
-          <Typography variant="body1" color="white" onClick={handleMilestoneFormOpen}>
+        <Button variant="contained" onClick={openNew}>
+          <Typography variant="body1" color="white">
             Новая веха
           </Typography>
         </Button>
-        <TextField size="small" label="Поиск" />
-      </Box>
-      <Paper
-        sx={{
-          width: '100%',
-          overflow: 'hidden',
-        }}
-      >
-        <TableContainer sx={{ maxHeight: 440 }}>
-          <Table stickyHeader>
-            <TableHead color="background.default">
-              <TableRow>
-                <TableCell>Название</TableCell>
-                <TableCell>Статус</TableCell>
-                <TableCell>Описание</TableCell>
-                <TableCell>Кол-во кейсов</TableCell>
-                <TableCell>Дата окончания</TableCell>
-                <TableCell sx={{ width: '30px' }}></TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody color="background.paper">
-              <TableRow hover>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>
-                  <IconButton onClick={handleClick} sx={{ p: 0 }}>
-                    <MoreVertIcon sx={{ color: 'white' }} />
-                  </IconButton>
-                  <Menu anchorEl={anchorEl} open={open} onClose={handleClose}>
-                    <MenuItem onClick={handleClose}>
-                      <EditIcon />
-                      Изменить
-                    </MenuItem>
-                    <MenuItem onClick={handleClose}>
-                      <DeleteIcon />
-                      Удалить
-                    </MenuItem>
-                  </Menu>
-                </TableCell>
-              </TableRow>
-              <TableRow hover>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>
-                  <IconButton onClick={handleClick} sx={{ p: 0 }}>
-                    <MoreVertIcon sx={{ color: 'white' }} />
-                  </IconButton>
-                  <Menu anchorEl={anchorEl} open={open} onClose={handleClose}>
-                    <MenuItem onClick={handleClose}>
-                      <EditIcon />
-                      Изменить
-                    </MenuItem>
-                    <MenuItem onClick={handleClose}>
-                      <DeleteIcon />
-                      Удалить
-                    </MenuItem>
-                  </Menu>
-                </TableCell>
-              </TableRow>
-              <TableRow hover>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>
-                  <IconButton onClick={handleClick} sx={{ p: 0 }}>
-                    <MoreVertIcon sx={{ color: 'white' }} />
-                  </IconButton>
-                  <Menu anchorEl={anchorEl} open={open} onClose={handleClose}>
-                    <MenuItem onClick={handleClose}>
-                      <EditIcon />
-                      Изменить
-                    </MenuItem>
-                    <MenuItem onClick={handleClose}>
-                      <DeleteIcon />
-                      Удалить
-                    </MenuItem>
-                  </Menu>
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </TableContainer>
-        <TablePagination
-          component="div"
-          count={3}
-          page={page}
-          onPageChange={handleChangePage}
-          rowsPerPage={rowsPerPage}
-          rowsPerPageOptions={[5, 10, 25]}
-          onRowsPerPageChange={handleChangeRowsPerPage}
+        <TextField
+          size="small"
+          label="Поиск"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onBlur={() => refetch()}
         />
-      </Paper>
-      <Modal open={milestoneFormOpen} onClose={handleMilestoneFormClose}>
+      </Box>
+      <TableContainer component={Paper}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Название</TableCell>
+              <TableCell>Описание</TableCell>
+              <TableCell>Кол-во тест-ранов</TableCell>
+              <TableCell>Дата окончания</TableCell>
+              <TableCell></TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {data?.milestonesByProjectId.nodes.map((m: Milestone, index: number) => (
+              <TableRow key={index} hover>
+                <TableCell>{m.name}</TableCell>
+                <TableCell>{m.description}</TableCell>
+                <TableCell>{m.testRunsCount}</TableCell>
+                <TableCell>{new Date(m.dueDate).toLocaleDateString()}</TableCell>
+                <TableCell>
+                  <IconButton onClick={(e) => openMenu(e, m)}>
+                    <MoreVertIcon />
+                  </IconButton>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+
+      <Menu anchorEl={menuAnchor} open={!!menuAnchor} onClose={closeMenu}>
+        <MenuItem onClick={() => selectedMilestone && openEdit(selectedMilestone)}>
+          <EditIcon fontSize="small" sx={{ mr: 1 }} /> Изменить
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            if (selectedMilestone) {
+              setDeleteId(selectedMilestone.id);
+              setConfirmOpen(true);
+              closeMenu();
+            }
+          }}
+        >
+          <DeleteIcon fontSize="small" sx={{ mr: 1 }} /> Удалить
+        </MenuItem>
+      </Menu>
+
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)}>
         <Box
           sx={{
             position: 'absolute',
@@ -215,9 +257,8 @@ export default function TestCasesPage({ params }: { params: Promise<{ projectId:
           }}
         >
           <IconButton
-            aria-label="close"
-            onClick={handleMilestoneFormClose}
             sx={{ position: 'absolute', right: 8, top: 8 }}
+            onClick={() => setModalOpen(false)}
           >
             <CloseIcon />
           </IconButton>
@@ -227,11 +268,11 @@ export default function TestCasesPage({ params }: { params: Promise<{ projectId:
           <Stack spacing={2}>
             <TextField
               required
-              name="title"
+              name="name"
               label="Название"
               fullWidth
-              value={milestoneFormData.title}
-              onChange={handleMilestoneInputChange}
+              value={formData.name || ''}
+              onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
             />
             <TextField
               name="description"
@@ -239,51 +280,38 @@ export default function TestCasesPage({ params }: { params: Promise<{ projectId:
               multiline
               rows={3}
               fullWidth
-              value={milestoneFormData.description}
-              onChange={handleMilestoneInputChange}
+              value={formData.description || ''}
+              onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
             />
-            <FormControl fullWidth>
-              <InputLabel>Статус</InputLabel>
-              <Select
-                name="status"
-                value={milestoneFormData.status}
-                label="Статус"
-                onChange={handleMilestoneSelectChange}
-              >
-                <MenuItem value="active">Активна</MenuItem>
-                <MenuItem value="completed">Закончена</MenuItem>
-              </Select>
-            </FormControl>
             <LocalizationProvider dateAdapter={AdapterDateFns}>
               <DatePicker
                 label="Дата окончания"
-                value={milestoneFormData.dueDate}
-                onChange={(newValue) => {
-                  setMilestoneFormData((prev) => ({
-                    ...prev,
-                    dueDate: newValue,
-                  }));
-                }}
-                slotProps={{
-                  textField: {
-                    fullWidth: true,
-                    name: 'dueDate',
-                  },
-                }}
+                value={formData.dueDate || null}
+                onChange={(date) => setFormData((prev) => ({ ...prev, dueDate: date }))}
+                slotProps={{ textField: { fullWidth: true } }}
               />
             </LocalizationProvider>
-            <Stack direction="row" spacing={1} justifyContent="flex-end">
-              <Button
-                variant="contained"
-                onClick={handleMilestoneFormSubmit}
-                sx={{ color: 'white' }}
-              >
+            <Box display="flex" justifyContent="flex-end">
+              <Button variant="contained" onClick={handleSubmit}>
                 Сохранить
               </Button>
-            </Stack>
+            </Box>
           </Stack>
         </Box>
       </Modal>
+
+      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
+        <DialogTitle>Удалить веху?</DialogTitle>
+        <DialogContent>
+          <Typography>Вы уверены, что хотите удалить веху? Это действие необратимо.</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmOpen(false)}>Отмена</Button>
+          <Button color="error" onClick={handleDelete}>
+            Удалить
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

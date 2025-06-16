@@ -4,16 +4,23 @@ import React from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@apollo/client';
-import { TextField, Button, Box, Typography, Alert } from '@mui/material';
-import { useAuth } from '@/hooks/useAuth';
+import { TextField, Button, Box, Typography } from '@mui/material';
 import { REGISTER_MUTATION } from '../queries';
 import { registerSchema } from '@/utils/validators';
 import { RegisterInput } from '../types';
-import { useState } from 'react';
+import AppSnackbar from '@/components/atoms/AppSnackbar';
 
 export function RegisterForm() {
-  const { login } = useAuth();
-  const [error, setError] = useState<string | null>(null);
+  const [snackbar, setSnackbar] = React.useState({
+    open: false,
+    message: '',
+    severity: 'info' as 'success' | 'error' | 'info' | 'warning',
+  });
+
+  const showSnackbar = (message: string, severity: typeof snackbar.severity = 'info') => {
+    setSnackbar({ open: true, message, severity });
+  };
+
   const [registerMutation] = useMutation(REGISTER_MUTATION);
   const {
     register,
@@ -25,12 +32,15 @@ export function RegisterForm() {
 
   const onSubmit = async (data: RegisterInput) => {
     try {
-      const { data: result } = await registerMutation({ variables: { input: data } });
-      if (result == null) throw new Error();
-      await login(data.email, data.password); // Используем REST-логин после регистрации
-      setError(null);
-    } catch {
-      setError('Registration failed. Email may already be in use.');
+      console.log('Payload:', data);
+      const response = await registerMutation({ variables: { input: data } });
+
+      if (!response.data) throw new Error('Ошибка регистрации');
+
+      showSnackbar('Пользователь успешно зарегистрирован', 'success');
+    } catch (err) {
+      showSnackbar('Ошибка регистрации', 'error');
+      console.error(err);
     }
   };
 
@@ -51,10 +61,15 @@ export function RegisterForm() {
         borderRadius: 2,
       }}
     >
+      <AppSnackbar
+        open={snackbar.open}
+        message={snackbar.message}
+        severity={snackbar.severity}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+      />
       <Typography variant="h2" textAlign="center">
         Регистрация
       </Typography>
-      {error && <Alert severity="error">{error}</Alert>}
       <TextField
         label="Имя"
         {...register('firstName')}

@@ -17,18 +17,70 @@ import {
   IconButton,
   MenuItem,
   Menu,
+  Tooltip,
 } from '@mui/material';
 import { use } from 'react';
+import { useMutation, useQuery } from '@apollo/client';
 import { useRouter } from 'next/navigation';
 import FolderOpenOutlinedIcon from '@mui/icons-material/FolderOpenOutlined';
 import FolderCopyOutlinedIcon from '@mui/icons-material/FolderCopyOutlined';
 import MoreHorizOutlinedIcon from '@mui/icons-material/MoreHorizOutlined';
-import ArrowUpwardOutlinedIcon from '@mui/icons-material/ArrowUpwardOutlined';
-import BackHandOutlinedIcon from '@mui/icons-material/BackHandOutlined';
 import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
+import ErrorIcon from '@mui/icons-material/Error';
+import WarningIcon from '@mui/icons-material/Warning';
+import InfoIcon from '@mui/icons-material/Info';
+import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import RemoveIcon from '@mui/icons-material/Remove';
+import { gql } from '@apollo/client';
+
+const TEST_SUITES_QUERY = gql`
+  query testSuitesByProjectId($projectId: UUID!) {
+    testSuitesByProjectId(projectId: $projectId) {
+      nodes {
+        id
+        name
+        description
+        preconditions
+        testCasesCount
+      }
+    }
+  }
+`;
+
+const TEST_CASES_QUERY = gql`
+  query testCasesByProjectId($projectId: UUID!, $filter: TestCaseFilterInput) {
+    testCasesByProjectId(projectId: $projectId, filter: $filter) {
+      nodes {
+        id
+        title
+        priority
+        severity
+      }
+    }
+  }
+`;
+
+const CREATE_TEST_SUITE = gql`
+  mutation createTestSuite($input: TestSuiteCreateInput!) {
+    createTestSuite(input: $input)
+  }
+`;
+
+const UPDATE_TEST_SUITE = gql`
+  mutation updateTestSuite($id: UUID!, $input: TestSuiteUpdateInput!) {
+    updateTestSuite(id: $id, input: $input)
+  }
+`;
+
+const DELETE_TEST_SUITE = gql`
+  mutation deleteTestSuite($id: UUID!) {
+    deleteTestSuite(id: $id)
+  }
+`;
 
 export default function RepositoryPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = use(params);
@@ -82,6 +134,63 @@ export default function RepositoryPage({ params }: { params: Promise<{ projectId
     handleClose();
   };
 
+  const [selectedSuiteId, setSelectedSuiteId] = React.useState<string | null>(null);
+  const [currentSuite, setCurrentSuite] = React.useState<any>(null);
+
+  const { data: suiteData } = useQuery(TEST_SUITES_QUERY, { variables: { projectId } });
+  const { data: caseData } = useQuery(TEST_CASES_QUERY, {
+    variables: { projectId, filter: { suiteId: selectedSuiteId } },
+    skip: !selectedSuiteId,
+  });
+
+  const handleSelectSuite = (suite: any) => {
+    setSelectedSuiteId(suite.id);
+    setCurrentSuite(suite);
+    console.log(caseData);
+  };
+
+  const getPriorityIcon = (priority: string) => {
+    const map = {
+      LOW: (
+        <Tooltip title="Приоритет: низкий">
+          <KeyboardArrowDownIcon color="info" />
+        </Tooltip>
+      ),
+      MEDIUM: (
+        <Tooltip title="Приоритет: средний">
+          <RemoveIcon color="warning" />
+        </Tooltip>
+      ),
+      HIGH: (
+        <Tooltip title="Приоритет: высокий">
+          <KeyboardArrowUpIcon color="error" />
+        </Tooltip>
+      ),
+    };
+    return map[priority as keyof typeof map];
+  };
+
+  const getSeverityIcon = (severity: string) => {
+    const map = {
+      MINOR: (
+        <Tooltip title="Серьёзность: незначительная">
+          <InfoIcon color="info" />
+        </Tooltip>
+      ),
+      MAJOR: (
+        <Tooltip title="Серьёзность: серьёзная">
+          <WarningIcon color="warning" />
+        </Tooltip>
+      ),
+      CRITICAL: (
+        <Tooltip title="Серьёзность: критическая">
+          <ErrorIcon color="error" />
+        </Tooltip>
+      ),
+    };
+    return map[severity as keyof typeof map];
+  };
+
   return (
     <Box
       sx={{
@@ -93,10 +202,7 @@ export default function RepositoryPage({ params }: { params: Promise<{ projectId
       }}
     >
       <Box sx={{ display: 'flex', gap: 1 }}>
-        <Typography variant="h1">{projectId} репозиторий</Typography>
-        <Typography variant="caption" color="text.secondary">
-          3 набора | 10 тест-кейсов
-        </Typography>
+        <Typography variant="h1">Репозиторий</Typography>
       </Box>
       <Box sx={{ display: 'flex', gap: 1 }}>
         <Button variant="contained" size="small">
@@ -114,7 +220,6 @@ export default function RepositoryPage({ params }: { params: Promise<{ projectId
             Новый набор
           </Typography>
         </Button>
-        <TextField size="small" label="Поиск" />
       </Box>
       <Box sx={{ display: 'flex', height: '100%' }}>
         <Paper
@@ -133,30 +238,23 @@ export default function RepositoryPage({ params }: { params: Promise<{ projectId
             <Typography variant="h6">Тестовые наборы</Typography>
           </Box>
           <List>
-            <ListItem disablePadding>
-              <ListItemButton selected>
-                <ListItemIcon>
-                  <FolderOpenOutlinedIcon />
-                </ListItemIcon>
-                <ListItemText primary="Проекты" secondary="Тест-кесов: 4" />
-              </ListItemButton>
-            </ListItem>
-            <ListItem disablePadding>
-              <ListItemButton>
-                <ListItemIcon>
-                  <FolderOpenOutlinedIcon />
-                </ListItemIcon>
-                <ListItemText primary="Проекты" secondary="Тест-кесов: 4" />
-              </ListItemButton>
-            </ListItem>
-            <ListItem disablePadding>
-              <ListItemButton>
-                <ListItemIcon>
-                  <FolderOpenOutlinedIcon />
-                </ListItemIcon>
-                <ListItemText primary="Проекты" secondary="Тест-кесов: 4" />
-              </ListItemButton>
-            </ListItem>
+            {suiteData &&
+              suiteData.testSuitesByProjectId.nodes.map((suite: any) => (
+                <ListItem key={suite.id} disablePadding>
+                  <ListItemButton
+                    selected={suite.id === selectedSuiteId}
+                    onClick={() => handleSelectSuite(suite)}
+                  >
+                    <ListItemIcon>
+                      <FolderOpenOutlinedIcon />
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={suite.name}
+                      secondary={`Тест-кейсов: ${suite.testCasesCount}`}
+                    />
+                  </ListItemButton>
+                </ListItem>
+              ))}
           </List>
         </Paper>
 
@@ -170,75 +268,66 @@ export default function RepositoryPage({ params }: { params: Promise<{ projectId
             pt: 1,
           }}
         >
-          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-            <Typography variant="h6">Проекты</Typography>
-            <Button sx={{ color: 'white' }} onClick={handleClick}>
-              <MoreHorizOutlinedIcon />
-            </Button>
-            <Menu
-              anchorEl={anchorEl}
-              open={open}
-              onClose={handleClose}
-              anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-              transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-            >
-              <MenuItem onClick={handleAddTestCase}>
-                <ListItemIcon>
-                  <AddIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>Добавить тест-кейс</ListItemText>
-              </MenuItem>
+          {currentSuite && (
+            <>
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                <Typography variant="h6">{currentSuite.name}</Typography>
+                <Button sx={{ color: 'white' }} onClick={handleClick}>
+                  <MoreHorizOutlinedIcon />
+                </Button>
+                <Menu
+                  anchorEl={anchorEl}
+                  open={open}
+                  onClose={handleClose}
+                  anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                  transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+                >
+                  <MenuItem onClick={handleAddTestCase}>
+                    <ListItemIcon>
+                      <AddIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText>Добавить тест-кейс</ListItemText>
+                  </MenuItem>
 
-              <MenuItem onClick={handleEdit}>
-                <ListItemIcon>
-                  <EditIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>Изменить</ListItemText>
-              </MenuItem>
+                  <MenuItem onClick={handleEdit}>
+                    <ListItemIcon>
+                      <EditIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText>Изменить</ListItemText>
+                  </MenuItem>
 
-              <MenuItem onClick={handleDelete}>
-                <ListItemIcon>
-                  <DeleteIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>Удалить</ListItemText>
-              </MenuItem>
-            </Menu>
-          </Box>
-          <List>
-            <ListItem disablePadding>
-              <ListItemButton>
-                <ListItemIcon sx={{ minWidth: 'auto' }}>
-                  <ArrowUpwardOutlinedIcon sx={{ color: '#D0021B' }} />
-                </ListItemIcon>
-                <ListItemIcon>
-                  <BackHandOutlinedIcon />
-                </ListItemIcon>
-                <ListItemText primary="Создать новый проект" />
-              </ListItemButton>
-            </ListItem>
-            <ListItem disablePadding>
-              <ListItemButton>
-                <ListItemIcon sx={{ minWidth: 'auto' }}>
-                  <ArrowUpwardOutlinedIcon sx={{ color: '#D0021B' }} />
-                </ListItemIcon>
-                <ListItemIcon>
-                  <BackHandOutlinedIcon />
-                </ListItemIcon>
-                <ListItemText primary="Создать новый проект" />
-              </ListItemButton>
-            </ListItem>
-            <ListItem disablePadding>
-              <ListItemButton>
-                <ListItemIcon sx={{ minWidth: 'auto' }}>
-                  <ArrowUpwardOutlinedIcon sx={{ color: '#D0021B' }} />
-                </ListItemIcon>
-                <ListItemIcon>
-                  <BackHandOutlinedIcon />
-                </ListItemIcon>
-                <ListItemText primary="Создать новый проект" />
-              </ListItemButton>
-            </ListItem>
-          </List>
+                  <MenuItem onClick={handleDelete}>
+                    <ListItemIcon>
+                      <DeleteIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText>Удалить</ListItemText>
+                  </MenuItem>
+                </Menu>
+              </Box>
+              <Typography variant="body1" color="text.secondary" sx={{ mt: 2, mb: 2 }}>
+                {currentSuite.description}
+              </Typography>
+              <Typography variant="body1" color="text.secondary" sx={{ mt: 2, mb: 2 }}>
+                {currentSuite.preconditions}
+              </Typography>
+              <List>
+                {caseData &&
+                  caseData.testCasesByProjectId.nodes.map((tc: any) => (
+                    <ListItem key={tc.id} disablePadding>
+                      <ListItemButton onClick={() => router.push(`test/${tc.id}`)}>
+                        <ListItemIcon sx={{ minWidth: 'auto', mr: 0.5 }}>
+                          {getPriorityIcon(tc.priority)}
+                        </ListItemIcon>
+                        <ListItemIcon sx={{ minWidth: 'auto', mr: 0.5 }}>
+                          {getSeverityIcon(tc.severity)}
+                        </ListItemIcon>
+                        <ListItemText primary={tc.title} />
+                      </ListItemButton>
+                    </ListItem>
+                  ))}
+              </List>
+            </>
+          )}
         </Paper>
       </Box>
       <Modal open={testSuiteFormOpen} onClose={handleTestSuiteFormClose}>

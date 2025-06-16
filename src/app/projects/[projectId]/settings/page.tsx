@@ -1,290 +1,314 @@
 'use client';
 
-import React, { use } from 'react';
+import React, { useEffect, useState, useMemo, use } from 'react';
 import {
   Box,
   Button,
   Typography,
   Tab,
   Tabs,
-  Avatar,
   TextField,
   RadioGroup,
   FormControlLabel,
   Radio,
-  Paper,
-  TableContainer,
-  Table,
-  TableHead,
-  TableRow,
-  TableCell,
-  TableBody,
-  TablePagination,
+  Autocomplete,
+  Chip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import FileUploadIcon from '@mui/icons-material/FileUpload';
+import { useQuery, useMutation, gql } from '@apollo/client';
+import { useRouter } from 'next/navigation';
+import AppSnackbar from '@/components/atoms/AppSnackbar';
 import SaveIcon from '@mui/icons-material/Save';
-import { Project } from '@/features/projects/types';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 
-interface TabPanelProps {
-  children?: React.ReactNode;
-  index: number;
-  value: number;
+interface User {
+  id: string;
+  fullName: string;
+  email: string;
 }
 
-function CustomTabPanel(props: TabPanelProps) {
-  const { children, value, index, ...other } = props;
+const PROJECT_QUERY = gql`
+  query ProjectById($id: UUID!) {
+    projectById(id: $id) {
+      id
+      name
+      description
+      accessType
+      ownerId
+      projectUserIds
+    }
+  }
+`;
 
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`simple-tabpanel-${index}`}
-      aria-labelledby={`simple-tab-${index}`}
-      {...other}
-    >
-      {value === index && (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4, pt: 3 }}>{children}</Box>
-      )}
-    </div>
-  );
-}
+const USERS_QUERY = gql`
+  query Users {
+    users {
+      nodes {
+        id
+        fullName
+        email
+      }
+    }
+  }
+`;
 
-export default function TestCasesPage({ params }: { params: Promise<{ projectId: string }> }) {
+const USER_BY_ID_QUERY = gql`
+  query UserById($id: UUID!) {
+    userById(id: $id) {
+      id
+      fullName
+      email
+    }
+  }
+`;
+
+const ME_QUERY = gql`
+  query Me {
+    me {
+      id
+    }
+  }
+`;
+
+const UPDATE_PROJECT_MUTATION = gql`
+  mutation UpdateProject($id: UUID!, $input: ProjectUpdateInput!) {
+    updateProject(id: $id, input: $input)
+  }
+`;
+
+const DELETE_PROJECT_MUTATION = gql`
+  mutation DeleteProject($id: UUID!) {
+    deleteProject(id: $id)
+  }
+`;
+
+export default function SettingsProjectPage({
+  params,
+}: {
+  params: Promise<{ projectId: string }>;
+}) {
   const { projectId } = use(params);
+  const router = useRouter();
 
-  const [accessValue, setAccessValue] = React.useState('public');
+  const [tabValue, setTabValue] = useState(0);
+  const [accessValue, setAccessValue] = useState<'public' | 'private'>('public');
+  const [projectName, setProjectName] = useState('');
+  const [projectDescription, setProjectDescription] = useState('');
+  const [selectedUsers, setSelectedUsers] = useState<User[]>([]);
+  const [initialState, setInitialState] = useState<any>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [snackbar, setSnackbar] = React.useState({
+    open: false,
+    message: '',
+    severity: 'info' as 'success' | 'error' | 'info' | 'warning',
+  });
 
-  const handleAccesChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setAccessValue((event.target as HTMLInputElement).value);
+  const { data: meData, loading: meLoading, error: meError } = useQuery(ME_QUERY);
+  const { data: projectData } = useQuery(PROJECT_QUERY, { variables: { id: projectId } });
+  const { data: usersData } = useQuery(USERS_QUERY);
+  const [updateProject] = useMutation(UPDATE_PROJECT_MUTATION);
+  const [deleteProject] = useMutation(DELETE_PROJECT_MUTATION);
+
+  useEffect(() => {
+    if (projectData?.projectById && usersData?.users.nodes) {
+      const proj = projectData.projectById;
+      const allUsers = usersData.users.nodes;
+      const matchedUsers = proj.projectUserIds
+        .filter((id: string) => id !== proj.ownerId)
+        .map((id: string) => allUsers.find((u: User) => u.id === id))
+        .filter(Boolean);
+
+      setProjectName(proj.name);
+      setProjectDescription(proj.description);
+      setAccessValue(proj.accessType.toLowerCase());
+      setSelectedUsers(matchedUsers);
+
+      setInitialState({
+        name: proj.name,
+        description: proj.description,
+        accessType: proj.accessType.toLowerCase(),
+        userIds: matchedUsers.map((u: User) => u.id).sort(),
+      });
+    }
+  }, [projectData, usersData]);
+
+  const isChanged = useMemo(() => {
+    if (!initialState) return false;
+    return (
+      projectName !== initialState.name ||
+      projectDescription !== initialState.description ||
+      accessValue !== initialState.accessType ||
+      selectedUsers
+        .map((u) => u.id)
+        .sort()
+        .join() !== initialState.userIds.join()
+    );
+  }, [projectName, projectDescription, accessValue, selectedUsers, initialState]);
+
+  const showSnackbar = (message: string, severity: typeof snackbar.severity = 'info') => {
+    setSnackbar({ open: true, message, severity });
   };
 
-  const [tabValue, setTabValue] = React.useState(0);
+  if (meLoading) return <Typography>Загрузка данных пользователя...</Typography>;
+  if (meError) return <Typography color="error">Ошибка загрузки пользователя</Typography>;
+  if (!meData?.me) return <Typography color="error">Пользователь не найден</Typography>;
 
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
-    setTabValue(newValue);
+  const currentUserId = meData.me.id;
+
+  const handleUpdate = async () => {
+    try {
+      const input: any = {
+        name: projectName,
+        description: projectDescription,
+        accessType: accessValue.toUpperCase(),
+        ownerId: meData?.me.id,
+      };
+      if (input.accessType === 'PRIVATE') {
+        input.projectUserIds = selectedUsers.map((u) => u.id);
+      }
+      await updateProject({ variables: { id: projectId, input } });
+      showSnackbar('Проект обновлен', 'success');
+    } catch (err) {
+      console.error(err);
+      showSnackbar('Ошибка при обновлении проекта', 'error');
+    }
   };
 
-  type User = {
-    id: number;
-    email: string;
-    fullName: string;
-    role: string;
-    avatarUrl: string;
-  };
-
-  const rows: User[] = [
-    {
-      id: 1,
-      email: 'alice@example.com',
-      fullName: 'Alice Johnson',
-      role: 'Admin',
-      avatarUrl: '/avatars/alice.png',
-    },
-    {
-      id: 2,
-      email: 'alice@example.com',
-      fullName: 'Alice Johnson',
-      role: 'Admin',
-      avatarUrl: '/avatars/alice.png',
-    },
-    {
-      id: 3,
-      email: 'alice@example.com',
-      fullName: 'Alice Johnson',
-      role: 'Admin',
-      avatarUrl: '/avatars/alice.png',
-    },
-    {
-      id: 4,
-      email: 'alice@example.com',
-      fullName: 'Alice Johnson',
-      role: 'Admin',
-      avatarUrl: '/avatars/alice.png',
-    },
-  ];
-
-  const [page, setPage] = React.useState(0);
-  const [rowsPerPage, setRowsPerPage] = React.useState(5);
-
-  const handleChangePage = (e: unknown, newPage: number) => {
-    setPage(newPage);
-  };
-
-  const handleChangeRowsPerPage = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setRowsPerPage(parseInt(e.target.value, 10));
-    setPage(0);
-  };
-
-  const paginatedRows = rows.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
-
-  const project: Project = {
-    createdAt: 'string',
-    defectsCount: 1,
-    description:
-      'stringstringstringstringstringstringstringstringstringstringstringstringstringstringstringstringstringstringstringstringstringstring',
-    iconBase64: 'string',
-    accessType: 'public',
-    id: projectId,
-    name: 'string',
-    ownerFullName: 'string',
-    ownerId: 'string',
-    projectUsersCount: 0,
-    testCasesCount: 1,
-    updatedAt: 'string',
+  const handleDelete = async () => {
+    try {
+      await deleteProject({ variables: { id: projectId } });
+      router.push('/projects');
+    } catch (err) {
+      console.error(err);
+      showSnackbar('Ошибка при удалении проекта', 'error');
+    }
   };
 
   return (
     <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 1 }}>
+      <AppSnackbar
+        open={snackbar.open}
+        message={snackbar.message}
+        severity={snackbar.severity}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+      />
       <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
         <Typography variant="h1">Настройки проекта</Typography>
-        <Button color="error" variant="contained" startIcon={<DeleteOutlineIcon />}>
+        <Button
+          color="error"
+          variant="contained"
+          startIcon={<DeleteOutlineIcon />}
+          onClick={() => setConfirmOpen(true)}
+        >
           Удалить проект
         </Button>
       </Box>
-      <Box sx={{ width: '100%' }}>
-        <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-          <Tabs value={tabValue} onChange={handleTabChange}>
-            <Tab label="Основные" />
-            <Tab label="Контроль доступа" />
-          </Tabs>
-        </Box>
-        <CustomTabPanel value={tabValue} index={0}>
-          <Box sx={{ display: 'flex', gap: 2, alignItems: 'start' }}>
-            <Avatar
-              variant="rounded"
-              src={project.iconBase64}
-              sx={{ width: '64px', height: '64px' }}
-            >
-              {(project.name[0] + project.name[1]).toUpperCase()}
-            </Avatar>
-            <Button
-              sx={{ bgcolor: 'background.paper', color: 'white' }}
-              variant="contained"
-              startIcon={<FileUploadIcon />}
-            >
-              Сменить лого
-            </Button>
-          </Box>
+      <Tabs value={tabValue} onChange={(e, v) => setTabValue(v)}>
+        <Tab label="Основные" />
+        <Tab label="Контроль доступа" />
+      </Tabs>
+
+      {tabValue === 0 && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4, pt: 3 }}>
           <TextField
-            required
             label="Имя проекта"
-            defaultValue={project.name}
-            sx={{ width: '250px' }}
+            value={projectName}
+            onChange={(e) => setProjectName(e.target.value)}
             size="small"
           />
           <TextField
             multiline
             label="Описание проекта"
-            defaultValue={project.description}
-            sx={{ width: '800px' }}
+            value={projectDescription}
+            onChange={(e) => setProjectDescription(e.target.value)}
             rows={5}
             size="small"
           />
-        </CustomTabPanel>
-        <CustomTabPanel value={tabValue} index={1}>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            <Typography variant="body1">Владелец проекта</Typography>
-            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-              <Avatar
-                sx={{ width: '24px', height: '24px' }}
-                variant="rounded"
-                src="https://d2cxucsjd6xvsd.cloudfront.net/public/user/thumb/cbf6ae7f66b7dd7c5792dd123c3b74fe.jpg"
-              >
-                MI
-              </Avatar>
-              <Typography variant="body2">Михаил Вялков</Typography>
-              <Button
-                size="small"
-                sx={{
-                  bgcolor: 'background.paper',
-                  color: 'white',
-                  width: '200px',
-                  padding: '6px 0',
-                }}
-                variant="contained"
-              >
-                Изменить владельца
-              </Button>
-            </Box>
-          </Box>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-            <Typography variant="body1">Тип доступности проекта</Typography>
-            <Box sx={{ display: 'flex', gap: 1, alignItems: 'start', flexDirection: 'column' }}>
-              <RadioGroup value={accessValue} onChange={handleAccesChange}>
-                <FormControlLabel value="public" control={<Radio />} label="Публичный" />
-                <FormControlLabel value="private" control={<Radio />} label="Приватный" />
-              </RadioGroup>
-              <Button
-                size="small"
-                sx={{
-                  color: 'white',
-                  width: '200px',
-                  padding: '6px 0',
-                  display: accessValue === 'public' ? 'none' : 'block',
-                }}
-                variant="contained"
-              >
-                Добавить пользователя
-              </Button>
-            </Box>
-            <Paper
-              sx={{
-                width: '100%',
-                overflow: 'hidden',
-                display: accessValue === 'public' ? 'none' : 'block',
-              }}
-            >
-              <TableContainer sx={{ maxHeight: 440 }}>
-                <Table stickyHeader>
-                  <TableHead color="background.default">
-                    <TableRow>
-                      <TableCell sx={{ width: 60 }} /> {/* Иконка */}
-                      <TableCell>Email</TableCell>
-                      <TableCell>ФИО</TableCell>
-                      <TableCell>Роль</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody color="background.paper">
-                    {paginatedRows.map((user) => (
-                      <TableRow key={user.id} hover>
-                        <TableCell>
-                          <Avatar
-                            sx={{ width: '36px', height: '36px' }}
-                            variant="rounded"
-                            src="https://d2cxucsjd6xvsd.cloudfront.net/public/user/thumb/cbf6ae7f66b7dd7c5792dd123c3b74fe.jpg"
-                          >
-                            MI
-                          </Avatar>
-                        </TableCell>
-                        <TableCell>{user.email}</TableCell>
-                        <TableCell>{user.fullName}</TableCell>
-                        <TableCell>{user.role}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-              <TablePagination
-                component="div"
-                count={rows.length}
-                page={page}
-                onPageChange={handleChangePage}
-                rowsPerPage={rowsPerPage}
-                rowsPerPageOptions={[5, 10, 25]}
-                onRowsPerPageChange={handleChangeRowsPerPage}
-              />
-            </Paper>
-          </Box>
-        </CustomTabPanel>
+        </Box>
+      )}
+
+      {tabValue === 1 && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, pt: 3 }}>
+          <RadioGroup
+            row
+            value={accessValue}
+            onChange={(e) => setAccessValue(e.target.value as 'public' | 'private')}
+          >
+            <FormControlLabel value="public" control={<Radio />} label="Публичный" />
+            <FormControlLabel value="private" control={<Radio />} label="Приватный" />
+          </RadioGroup>
+
+          {accessValue === 'private' && (
+            <Autocomplete
+              multiple
+              options={(usersData?.users.nodes || []).filter((u: any) => u.id !== currentUserId)}
+              getOptionLabel={(option) => `${option.fullName} (${option.email})`}
+              value={selectedUsers}
+              onChange={(_, newValue) => setSelectedUsers(newValue)}
+              filterSelectedOptions
+              isOptionEqualToValue={(option, value) => option.id === value.id}
+              renderOption={(props, option) => (
+                <li {...props} key={`user-option-${option.id}`}>
+                  <Box>
+                    <Typography>{option.fullName}</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {option.email}
+                    </Typography>
+                  </Box>
+                </li>
+              )}
+              renderTags={(tagValue, getTagProps) =>
+                tagValue.map((option, index) => {
+                  const { key, ...rest } = getTagProps({ index });
+                  return (
+                    <Chip
+                      key={`user-tag-${option.id}`}
+                      label={`${option.fullName} (${option.email})`}
+                      {...rest}
+                    />
+                  );
+                })
+              }
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Пользователи"
+                  placeholder="Начните вводить имя или email..."
+                />
+              )}
+              sx={{ width: 500, mt: 2 }}
+            />
+          )}
+        </Box>
+      )}
+
+      <Box sx={{ mt: 3 }}>
+        <Button
+          sx={{ color: 'white', width: '200px', mt: 4 }}
+          variant="contained"
+          startIcon={<SaveIcon />}
+          disabled={!isChanged}
+          onClick={handleUpdate}
+        >
+          Обновить настройки
+        </Button>
       </Box>
-      <Button
-        sx={{ color: 'white', width: '200px', mt: 4 }}
-        variant="contained"
-        startIcon={<SaveIcon />}
-      >
-        Обновить настройки
-      </Button>
+
+      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
+        <DialogTitle>Удалить проект?</DialogTitle>
+        <DialogContent>
+          <Typography>Вы уверены, что хотите удалить проект? Это действие необратимо.</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmOpen(false)}>Отмена</Button>
+          <Button color="error" onClick={handleDelete}>
+            Удалить
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

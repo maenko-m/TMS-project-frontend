@@ -4,159 +4,170 @@ import React, { use } from 'react';
 import {
   Box,
   Button,
-  IconButton,
-  Menu,
-  MenuItem,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Paper,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
-  TablePagination,
   TableRow,
   TextField,
   Typography,
 } from '@mui/material';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
+import { useQuery, gql } from '@apollo/client';
+import AppSnackbar from '@/components/atoms/AppSnackbar';
 
-export default function TestCasesPage({ params }: { params: Promise<{ projectId: string }> }) {
+const ATTACHMENTS_QUERY = gql`
+  query Attachments($projectId: UUID!, $filter: String) {
+    attachmentsByProjectId(projectId: $projectId, where: { fileName: { contains: $filter } }) {
+      nodes {
+        id
+        fileName
+        contentType
+        fileSize
+        fileUrl
+        uploadedById
+      }
+    }
+  }
+`;
+
+const USER_BY_ID = gql`
+  query UserById($id: UUID!) {
+    userById(id: $id) {
+      id
+      fullName
+    }
+  }
+`;
+
+function UserName({ userId }: { userId: string }) {
+  const { data } = useQuery(USER_BY_ID, { variables: { id: userId } });
+  return <>{data?.userById.fullName || '—'}</>;
+}
+
+export default function AttachmentsPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = use(params);
+  const [filter, setFilter] = React.useState('');
+  const [uploadOpen, setUploadOpen] = React.useState(false);
+  const [file, setFile] = React.useState<File | null>(null);
 
-  const [page, setPage] = React.useState(0);
-  const [rowsPerPage, setRowsPerPage] = React.useState(5);
+  const { data, refetch } = useQuery(ATTACHMENTS_QUERY, {
+    variables: { projectId, filter },
+    fetchPolicy: 'network-only',
+  });
 
-  const handleChangePage = (e: unknown, newPage: number) => {
-    setPage(newPage);
+  const attachments = data?.attachmentsByProjectId.nodes || [];
+
+  const handleUpload = async () => {
+    if (!file) return;
+    const token = localStorage.getItem('tms_token');
+    const form = new FormData();
+
+    form.append('File', file);
+    form.append('ProjectId', projectId);
+
+    await fetch('http://localhost:7265/api/upload', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: form,
+    });
+
+    setFile(null);
+    setUploadOpen(false);
+    refetch();
+    showSnackbar('Успешно загружено', 'success');
   };
 
-  const handleChangeRowsPerPage = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setRowsPerPage(parseInt(e.target.value, 10));
-    setPage(0);
-  };
+  const [snackbar, setSnackbar] = React.useState({
+    open: false,
+    message: '',
+    severity: 'info' as 'success' | 'error' | 'info' | 'warning',
+  });
 
-  const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
-  const open = Boolean(anchorEl);
-  const handleClick = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
-  };
-  const handleClose = () => {
-    setAnchorEl(null);
+  const showSnackbar = (message: string, severity: typeof snackbar.severity = 'info') => {
+    setSnackbar({ open: true, message, severity });
   };
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', p: 3, gap: 3 }}>
+      <AppSnackbar
+        open={snackbar.open}
+        message={snackbar.message}
+        severity={snackbar.severity}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+      />
+      <Typography variant="h1">Вложения</Typography>
+
       <Box sx={{ display: 'flex', gap: 1 }}>
-        <Typography variant="h1">Вложения</Typography>
-      </Box>
-      <Box sx={{ display: 'flex', gap: 1 }}>
-        <Button variant="contained" size="small">
+        <Button variant="contained" size="small" onClick={() => setUploadOpen(true)}>
           <Typography variant="body1" color="white">
             Добавить файл
           </Typography>
         </Button>
-        <TextField size="small" label="Поиск" />
+        <TextField
+          size="small"
+          label="Поиск"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+        />
       </Box>
-      <Paper
-        sx={{
-          width: '100%',
-          overflow: 'hidden',
-        }}
-      >
-        <TableContainer sx={{ maxHeight: 440 }}>
+
+      <Paper sx={{ width: '100%', overflow: 'hidden' }}>
+        <TableContainer>
           <Table stickyHeader>
-            <TableHead color="background.default">
+            <TableHead>
               <TableRow>
                 <TableCell>Название файла</TableCell>
                 <TableCell>MIME</TableCell>
                 <TableCell>Размер</TableCell>
                 <TableCell>Автор</TableCell>
-                <TableCell>Дата создания</TableCell>
-                <TableCell sx={{ width: '30px' }}></TableCell>
+                <TableCell>Ссылка</TableCell>
               </TableRow>
             </TableHead>
-            <TableBody color="background.paper">
-              <TableRow hover>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>
-                  <IconButton onClick={handleClick} sx={{ p: 0 }}>
-                    <MoreVertIcon sx={{ color: 'white' }} />
-                  </IconButton>
-                  <Menu anchorEl={anchorEl} open={open} onClose={handleClose}>
-                    <MenuItem onClick={handleClose}>
-                      <EditIcon />
-                      Изменить
-                    </MenuItem>
-                    <MenuItem onClick={handleClose}>
-                      <DeleteIcon />
-                      Удалить
-                    </MenuItem>
-                  </Menu>
-                </TableCell>
-              </TableRow>
-              <TableRow hover>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>
-                  <IconButton onClick={handleClick} sx={{ p: 0 }}>
-                    <MoreVertIcon sx={{ color: 'white' }} />
-                  </IconButton>
-                  <Menu anchorEl={anchorEl} open={open} onClose={handleClose}>
-                    <MenuItem onClick={handleClose}>
-                      <EditIcon />
-                      Изменить
-                    </MenuItem>
-                    <MenuItem onClick={handleClose}>
-                      <DeleteIcon />
-                      Удалить
-                    </MenuItem>
-                  </Menu>
-                </TableCell>
-              </TableRow>
-              <TableRow hover>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>
-                  <IconButton onClick={handleClick} sx={{ p: 0 }}>
-                    <MoreVertIcon sx={{ color: 'white' }} />
-                  </IconButton>
-                  <Menu anchorEl={anchorEl} open={open} onClose={handleClose}>
-                    <MenuItem onClick={handleClose}>
-                      <EditIcon />
-                      Изменить
-                    </MenuItem>
-                    <MenuItem onClick={handleClose}>
-                      <DeleteIcon />
-                      Удалить
-                    </MenuItem>
-                  </Menu>
-                </TableCell>
-              </TableRow>
+            <TableBody>
+              {attachments.map((att: any) => (
+                <TableRow key={att.id} hover>
+                  <TableCell>{att.fileName}</TableCell>
+                  <TableCell>{att.contentType}</TableCell>
+                  <TableCell>{(att.fileSize / 1024).toFixed(1)} KB</TableCell>
+                  <TableCell>
+                    <UserName userId={att.uploadedById} />
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      href={`http://localhost:7265/${att.fileUrl}`}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      Скачать
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
             </TableBody>
           </Table>
         </TableContainer>
-        <TablePagination
-          component="div"
-          count={3}
-          page={page}
-          onPageChange={handleChangePage}
-          rowsPerPage={rowsPerPage}
-          rowsPerPageOptions={[5, 10, 25]}
-          onRowsPerPageChange={handleChangeRowsPerPage}
-        />
       </Paper>
+
+      <Dialog open={uploadOpen} onClose={() => setUploadOpen(false)}>
+        <DialogTitle>Добавить вложение</DialogTitle>
+        <DialogContent>
+          <input type="file" onChange={(e) => setFile(e.target.files?.[0] || null)} accept="*" />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setUploadOpen(false)}>Отмена</Button>
+          <Button onClick={handleUpload} disabled={!file}>
+            Загрузить
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

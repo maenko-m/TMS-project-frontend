@@ -1,10 +1,13 @@
 'use client';
 
-import React, { use } from 'react';
+import React from 'react';
 import {
-  Avatar,
   Box,
   Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   IconButton,
   Menu,
   MenuItem,
@@ -16,7 +19,6 @@ import {
   TableCell,
   TableContainer,
   TableHead,
-  TablePagination,
   TableRow,
   TextField,
   Typography,
@@ -25,193 +27,189 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import CloseIcon from '@mui/icons-material/Close';
+import { useQuery, useMutation, gql } from '@apollo/client';
+import AppSnackbar from '@/components/atoms/AppSnackbar';
 
-export default function TestCasesPage({ params }: { params: Promise<{ projectId: string }> }) {
-  const { projectId } = use(params);
+const TAGS_QUERY = gql`
+  query Tags($filter: TagFilterInput) {
+    tags(filter: $filter) {
+      nodes {
+        id
+        name
+        createdAt
+      }
+    }
+  }
+`;
 
-  const [page, setPage] = React.useState(0);
-  const [rowsPerPage, setRowsPerPage] = React.useState(5);
+const CREATE_TAG = gql`
+  mutation CreateTag($input: TagCreateInput!) {
+    createTag(input: $input)
+  }
+`;
 
-  const handleChangePage = (e: unknown, newPage: number) => {
-    setPage(newPage);
-  };
+const UPDATE_TAG = gql`
+  mutation UpdateTag($id: UUID!, $input: TagUpdateInput!) {
+    updateTag(id: $id, input: $input)
+  }
+`;
 
-  const handleChangeRowsPerPage = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setRowsPerPage(parseInt(e.target.value, 10));
-    setPage(0);
-  };
+const DELETE_TAG = gql`
+  mutation DeleteTag($id: UUID!) {
+    deleteTag(id: $id)
+  }
+`;
 
-  const [tagFormOpen, setTagFormOpen] = React.useState(false);
-  const [tagFormData, setTagFormData] = React.useState({
-    title: '',
+export default function TagsPage({ params }: { params: Promise<{ projectId: string }> }) {
+  const { projectId } = React.use(params);
+
+  const [search, setSearch] = React.useState('');
+  const { data, refetch } = useQuery(TAGS_QUERY, {
+    variables: { filter: { name: search } },
+    fetchPolicy: 'network-only',
   });
 
-  const handleTagFormOpen = () => setTagFormOpen(true);
-  const handleTagFormClose = () => setTagFormOpen(false);
+  const [createTag] = useMutation(CREATE_TAG);
+  const [updateTag] = useMutation(UPDATE_TAG);
+  const [deleteTag] = useMutation(DELETE_TAG);
 
-  const handleTagFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setTagFormData((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleTagFormSubmit = () => {
-    console.log('Данные формы:', tagFormData);
-    handleTagFormClose();
-  };
-
+  const [tagFormOpen, setTagFormOpen] = React.useState(false);
+  const [tagFormData, setTagFormData] = React.useState<{ id?: string; name: string }>({ name: '' });
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
-  const open = Boolean(anchorEl);
-  const handleClick = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
+  const [menuIndex, setMenuIndex] = React.useState<number | null>(null);
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const [tagToDelete, setTagToDelete] = React.useState<string | null>(null);
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearch(e.target.value);
+    refetch({ filter: { name: e.target.value } });
   };
-  const handleClose = () => {
+
+  const handleMenuClick = (e: React.MouseEvent<HTMLElement>, index: number) => {
+    setAnchorEl(e.currentTarget);
+    setMenuIndex(index);
+  };
+  const handleCloseMenu = () => {
     setAnchorEl(null);
+    setMenuIndex(null);
+  };
+
+  const handleTagFormOpen = () => setTagFormOpen(true);
+  const handleTagFormClose = () => {
+    setTagFormOpen(false);
+    setTagFormData({ name: '' });
+  };
+
+  const handleEdit = (tag: { id: string; name: string }) => {
+    setTagFormData({ id: tag.id, name: tag.name });
+    setTagFormOpen(true);
+  };
+
+  const handleTagFormChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setTagFormData((prev) => ({ ...prev, name: e.target.value }));
+  };
+
+  const handleTagFormSubmit = async () => {
+    try {
+      if (tagFormData.id) {
+        await updateTag({ variables: { id: tagFormData.id, input: { name: tagFormData.name } } });
+      } else {
+        await createTag({ variables: { input: { name: tagFormData.name } } });
+      }
+      refetch();
+      handleTagFormClose();
+      showSnackbar('Успешно сохранено', 'success');
+    } catch (error) {
+      showSnackbar('Ошибка при сохранении', 'error');
+      console.error('Ошибка при сохранении:', error);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!tagToDelete) return;
+    try {
+      await deleteTag({ variables: { id: tagToDelete } });
+      refetch();
+    } catch (e) {
+      showSnackbar('Ошибка при удалении', 'error');
+      console.error('Ошибка при удалении:', e);
+    } finally {
+      setConfirmOpen(false);
+      setTagToDelete(null);
+      showSnackbar('Успешно удалено', 'success');
+    }
+  };
+
+  const tags = data?.tags?.nodes || [];
+
+  const [snackbar, setSnackbar] = React.useState({
+    open: false,
+    message: '',
+    severity: 'info' as 'success' | 'error' | 'info' | 'warning',
+  });
+
+  const showSnackbar = (message: string, severity: typeof snackbar.severity = 'info') => {
+    setSnackbar({ open: true, message, severity });
   };
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', p: 3, gap: 3 }}>
+      <AppSnackbar
+        open={snackbar.open}
+        message={snackbar.message}
+        severity={snackbar.severity}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+      />
+      <Typography variant="h1">Тэги</Typography>
       <Box sx={{ display: 'flex', gap: 1 }}>
-        <Typography variant="h1">Тэги</Typography>
-      </Box>
-      <Box sx={{ display: 'flex', gap: 1 }}>
-        <Button variant="contained" size="small">
-          <Typography variant="body1" color="white" onClick={handleTagFormOpen}>
+        <Button variant="contained" onClick={handleTagFormOpen}>
+          <Typography variant="body1" color="white">
             Новый тэг
           </Typography>
         </Button>
-        <TextField size="small" label="Поиск" />
+        <TextField size="small" label="Поиск" value={search} onChange={handleSearchChange} />
       </Box>
-      <Paper
-        sx={{
-          width: '100%',
-          overflow: 'hidden',
-        }}
-      >
-        <TableContainer sx={{ maxHeight: 440 }}>
-          <Table stickyHeader>
-            <TableHead color="background.default">
+      <Paper>
+        <TableContainer>
+          <Table>
+            <TableHead>
               <TableRow>
                 <TableCell>Название</TableCell>
-                <TableCell>Автор</TableCell>
-                <TableCell sx={{ width: '30px' }}>Кейсы</TableCell>
-                <TableCell sx={{ width: '30px' }}>Раны</TableCell>
-                <TableCell sx={{ width: '30px' }}>Дефекты</TableCell>
-                <TableCell sx={{ width: '30px' }}></TableCell>
+                <TableCell>Дата создания</TableCell>
+                <TableCell align="right">Действия</TableCell>
               </TableRow>
             </TableHead>
-            <TableBody color="background.paper">
-              <TableRow hover>
-                <TableCell>testewts</TableCell>
-                <TableCell>
-                  <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Avatar
-                      sx={{ width: '24px', height: '24px' }}
-                      variant="rounded"
-                      src="https://d2cxucsjd6xvsd.cloudfront.net/public/user/thumb/cbf6ae7f66b7dd7c5792dd123c3b74fe.jpg"
-                    >
-                      MI
-                    </Avatar>
-                    <Typography variant="body2">Михаил Вялков</Typography>
-                  </Box>
-                </TableCell>
-                <TableCell>1</TableCell>
-                <TableCell>2</TableCell>
-                <TableCell>3</TableCell>
-                <TableCell>
-                  <IconButton onClick={handleClick} sx={{ p: 0 }}>
-                    <MoreVertIcon sx={{ color: 'white' }} />
-                  </IconButton>
-                  <Menu anchorEl={anchorEl} open={open} onClose={handleClose}>
-                    <MenuItem onClick={handleClose}>
-                      <EditIcon />
-                      Изменить
-                    </MenuItem>
-                    <MenuItem onClick={handleClose}>
-                      <DeleteIcon />
-                      Удалить
-                    </MenuItem>
-                  </Menu>
-                </TableCell>
-              </TableRow>
-              <TableRow hover>
-                <TableCell>testewts</TableCell>
-                <TableCell>
-                  <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Avatar
-                      sx={{ width: '24px', height: '24px' }}
-                      variant="rounded"
-                      src="https://d2cxucsjd6xvsd.cloudfront.net/public/user/thumb/cbf6ae7f66b7dd7c5792dd123c3b74fe.jpg"
-                    >
-                      MI
-                    </Avatar>
-                    <Typography variant="body2">Михаил Вялков</Typography>
-                  </Box>
-                </TableCell>
-                <TableCell>1</TableCell>
-                <TableCell>2</TableCell>
-                <TableCell>3</TableCell>
-                <TableCell>
-                  <IconButton onClick={handleClick} sx={{ p: 0 }}>
-                    <MoreVertIcon sx={{ color: 'white' }} />
-                  </IconButton>
-                  <Menu anchorEl={anchorEl} open={open} onClose={handleClose}>
-                    <MenuItem onClick={handleClose}>
-                      <EditIcon />
-                      Изменить
-                    </MenuItem>
-                    <MenuItem onClick={handleClose}>
-                      <DeleteIcon />
-                      Удалить
-                    </MenuItem>
-                  </Menu>
-                </TableCell>
-              </TableRow>
-              <TableRow hover>
-                <TableCell>testewts</TableCell>
-                <TableCell>
-                  <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Avatar
-                      sx={{ width: '24px', height: '24px' }}
-                      variant="rounded"
-                      src="https://d2cxucsjd6xvsd.cloudfront.net/public/user/thumb/cbf6ae7f66b7dd7c5792dd123c3b74fe.jpg"
-                    >
-                      MI
-                    </Avatar>
-                    <Typography variant="body2">Михаил Вялков</Typography>
-                  </Box>
-                </TableCell>
-                <TableCell>1</TableCell>
-                <TableCell>2</TableCell>
-                <TableCell>3</TableCell>
-                <TableCell>
-                  <IconButton onClick={handleClick} sx={{ p: 0 }}>
-                    <MoreVertIcon sx={{ color: 'white' }} />
-                  </IconButton>
-                  <Menu anchorEl={anchorEl} open={open} onClose={handleClose}>
-                    <MenuItem onClick={handleClose}>
-                      <EditIcon />
-                      Изменить
-                    </MenuItem>
-                    <MenuItem onClick={handleClose}>
-                      <DeleteIcon />
-                      Удалить
-                    </MenuItem>
-                  </Menu>
-                </TableCell>
-              </TableRow>
+            <TableBody>
+              {tags.map((tag: { id: string; name: string; createdAt: string }, index: number) => (
+                <TableRow key={tag.id} hover>
+                  <TableCell>{tag.name}</TableCell>
+                  <TableCell>{new Date(tag.createdAt).toLocaleDateString('ru-RU')}</TableCell>
+                  <TableCell align="right">
+                    <IconButton onClick={(e) => handleMenuClick(e, index)}>
+                      <MoreVertIcon />
+                    </IconButton>
+                    <Menu anchorEl={anchorEl} open={menuIndex === index} onClose={handleCloseMenu}>
+                      <MenuItem onClick={() => handleEdit(tag)}>
+                        <EditIcon fontSize="small" sx={{ mr: 1 }} /> Изменить
+                      </MenuItem>
+                      <MenuItem
+                        onClick={() => {
+                          setTagToDelete(tag.id);
+                          setConfirmOpen(true);
+                          handleCloseMenu();
+                        }}
+                      >
+                        <DeleteIcon fontSize="small" sx={{ mr: 1 }} /> Удалить
+                      </MenuItem>
+                    </Menu>
+                  </TableCell>
+                </TableRow>
+              ))}
             </TableBody>
           </Table>
         </TableContainer>
-        <TablePagination
-          component="div"
-          count={3}
-          page={page}
-          onPageChange={handleChangePage}
-          rowsPerPage={rowsPerPage}
-          rowsPerPageOptions={[5, 10, 25]}
-          onRowsPerPageChange={handleChangeRowsPerPage}
-        />
       </Paper>
+
       <Modal open={tagFormOpen} onClose={handleTagFormClose}>
         <Box
           sx={{
@@ -234,25 +232,38 @@ export default function TestCasesPage({ params }: { params: Promise<{ projectId:
             <CloseIcon />
           </IconButton>
           <Typography variant="h6" mb={2}>
-            Новый тэг
+            {tagFormData.id ? 'Редактировать тэг' : 'Новый тэг'}
           </Typography>
           <Stack spacing={2}>
             <TextField
               required
-              name="title"
+              name="name"
               label="Название"
               fullWidth
-              value={tagFormData.title}
+              value={tagFormData.name}
               onChange={handleTagFormChange}
             />
             <Stack direction="row" spacing={1} justifyContent="flex-end">
-              <Button variant="contained" onClick={handleTagFormSubmit} sx={{ color: 'white' }}>
+              <Button variant="contained" onClick={handleTagFormSubmit}>
                 Сохранить
               </Button>
             </Stack>
           </Stack>
         </Box>
       </Modal>
+
+      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
+        <DialogTitle>Удалить тэг?</DialogTitle>
+        <DialogContent>
+          <Typography>Вы уверены, что хотите удалить тэг? Это действие необратимо.</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmOpen(false)}>Отмена</Button>
+          <Button color="error" onClick={handleDelete}>
+            Удалить
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

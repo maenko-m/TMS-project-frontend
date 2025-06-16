@@ -1,305 +1,405 @@
 'use client';
 
-import React, { use } from 'react';
+import React from 'react';
 import {
-  Avatar,
   Box,
   Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   IconButton,
   Menu,
   MenuItem,
   Paper,
   Select,
-  SelectChangeEvent,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
-  TablePagination,
   TableRow,
   TextField,
   Typography,
+  OutlinedInput,
+  Modal,
+  Stack,
 } from '@mui/material';
-import AppSnackbar from '@/components/atoms/AppSnackbar';
-import { useRouter } from 'next/navigation';
-import KeyboardDoubleArrowUpIcon from '@mui/icons-material/KeyboardDoubleArrowUp';
-import OutlinedInput from '@mui/material/OutlinedInput';
+import { useQuery, useMutation, gql } from '@apollo/client';
+import CloseIcon from '@mui/icons-material/Close';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
-import theme from '@/lib/theme';
+import ErrorIcon from '@mui/icons-material/Error';
+import ReportProblemIcon from '@mui/icons-material/ReportProblem';
+import InfoIcon from '@mui/icons-material/Info';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
+import { useRouter } from 'next/navigation';
 
-const ITEM_HEIGHT = 48;
-const ITEM_PADDING_TOP = 8;
-const MenuProps = {
-  PaperProps: {
-    style: {
-      maxHeight: ITEM_HEIGHT * 4.5 + ITEM_PADDING_TOP,
-      width: 250,
-    },
-  },
-};
+type Severity = 'CRITICAL' | 'MAJOR' | 'MINOR' | 'NORMAL' | 'TRIVIAL';
 
-function getStyles(name: string, personName: readonly string[]) {
-  return {
-    fontWeight: personName.includes(name)
-      ? theme.typography.fontWeightMedium
-      : theme.typography.fontWeightRegular,
-  };
+const SEVERITY_OPTIONS: { value: Severity; label: string; icon: React.ReactNode; color: string }[] =
+  [
+    { value: 'CRITICAL', label: 'Критичный', icon: <ErrorIcon />, color: '#D0021B' },
+    { value: 'MAJOR', label: 'Серьёзный', icon: <ReportProblemIcon />, color: '#F5A623' },
+    { value: 'MINOR', label: 'Минорный', icon: <InfoIcon />, color: '#4A90E2' },
+    { value: 'NORMAL', label: 'Нормальный', icon: <CheckCircleOutlineIcon />, color: '#7ED321' },
+    { value: 'TRIVIAL', label: 'Тривиальный', icon: <ArrowDownwardIcon />, color: '#9B9B9B' },
+  ];
+
+const DEFECTS_QUERY = gql`
+  query defectsByProjectId($projectId: UUID!, $filter: DefectFilterInput) {
+    defectsByProjectId(projectId: $projectId, filter: $filter) {
+      nodes {
+        id
+        title
+        actualResult
+        severity
+        createdAt
+        createdById
+      }
+    }
+  }
+`;
+
+const DELETE_DEFECT = gql`
+  mutation deleteDefect($id: UUID!) {
+    deleteDefect(id: $id)
+  }
+`;
+
+const CREATE_DEFECT = gql`
+  mutation createDefect($input: DefectCreateInput!) {
+    createDefect(input: $input)
+  }
+`;
+
+const UPDATE_DEFECT = gql`
+  mutation updateDefect($id: UUID!, $input: DefectUpdateInput!) {
+    updateDefect(id: $id, input: $input)
+  }
+`;
+
+const USER_BY_ID = gql`
+  query userById($id: UUID!) {
+    userById(id: $id) {
+      id
+      fullName
+    }
+  }
+`;
+
+const ME_QUERY = gql`
+  query me {
+    me {
+      id
+      fullName
+    }
+  }
+`;
+
+interface Defect {
+  id: string;
+  title: string;
+  severity: Severity;
+  createdAt: string;
+  createdById: string;
+  actualResult: string;
 }
 
-const names = [
-  'Oliver Hansen',
-  'Van Henry',
-  'April Tucker',
-  'Ralph Hubbard',
-  'Omar Alexander',
-  'Carlos Abbott',
-  'Miriam Wagner',
-  'Bradley Wilkerson',
-  'Virginia Andrews',
-  'Kelly Snyder',
-];
+function UserName({ userId }: { userId: string }) {
+  const { data } = useQuery(USER_BY_ID, { variables: { id: userId } });
+  return <>{data?.userById.fullName || '—'}</>;
+}
 
-export default function TestCasesPage({ params }: { params: Promise<{ projectId: string }> }) {
-  const { projectId } = use(params);
-
+export default function DefectsPage({ params }: { params: Promise<{ projectId: string }> }) {
   const router = useRouter();
+  const { projectId } = React.use(params);
 
-  const [page, setPage] = React.useState(0);
-  const [rowsPerPage, setRowsPerPage] = React.useState(5);
+  const [search, setSearch] = React.useState('');
+  const [severityFilter, setSeverityFilter] = React.useState<Severity | ''>('');
+  const [menuAnchor, setMenuAnchor] = React.useState<null | HTMLElement>(null);
+  const [activeId, setActiveId] = React.useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
 
-  const handleChangePage = (e: unknown, newPage: number) => {
-    setPage(newPage);
-  };
-
-  const handleChangeRowsPerPage = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setRowsPerPage(parseInt(e.target.value, 10));
-    setPage(0);
-  };
-
-  const [personName, setPersonName] = React.useState<string[]>([]);
-
-  const handleChange = (event: SelectChangeEvent<typeof personName>) => {
-    const {
-      target: { value },
-    } = event;
-    setPersonName(typeof value === 'string' ? value.split(',') : value);
-  };
-
-  const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
-  const open = Boolean(anchorEl);
-  const handleClick = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
-  };
-  const handleClose = () => {
-    setAnchorEl(null);
-  };
-
-  const [snackbar, setSnackbar] = React.useState({
-    open: false,
-    message: '',
-    severity: 'info' as 'success' | 'error' | 'info' | 'warning',
+  const { data, refetch } = useQuery(DEFECTS_QUERY, {
+    variables: {
+      projectId,
+      filter: { title: search || undefined, severity: severityFilter || undefined },
+    },
+    fetchPolicy: 'network-only',
   });
 
-  const showSnackbar = (message: string, severity: typeof snackbar.severity = 'info') => {
-    setSnackbar({ open: true, message, severity });
+  const [deleteDefect] = useMutation(DELETE_DEFECT);
+
+  const defects: Defect[] = data?.defectsByProjectId.nodes || [];
+
+  const openMenu = (e: React.MouseEvent, id: string) => {
+    setMenuAnchor(e.currentTarget as HTMLElement); // 👈 тут каст
+    setActiveId(id);
+  };
+  const closeMenu = () => {
+    setMenuAnchor(null);
+    setActiveId(null);
+  };
+
+  const confirmDelete = (id: string) => {
+    setActiveId(id);
+    setConfirmOpen(true);
+    setMenuAnchor(null);
+  };
+
+  const handleDelete = async () => {
+    console.log(activeId);
+    if (!activeId) return;
+    await deleteDefect({ variables: { id: activeId } });
+    setConfirmOpen(false);
+    setActiveId(null);
+    refetch();
+  };
+
+  const [createDefect] = useMutation(CREATE_DEFECT);
+  const [updateDefect] = useMutation(UPDATE_DEFECT);
+
+  const [modalOpen, setModalOpen] = React.useState(false);
+  const [editMode, setEditMode] = React.useState(false);
+  const [formData, setFormData] = React.useState({
+    id: '',
+    title: '',
+    actualResult: '',
+    severity: 'NORMAL' as Severity,
+  });
+
+  const { data: meData } = useQuery(ME_QUERY);
+  const createdById = meData?.me?.id;
+
+  const handleSubmit = async () => {
+    if (!formData.title || !formData.actualResult) return;
+
+    if (editMode && formData.id) {
+      await updateDefect({
+        variables: {
+          id: formData.id,
+          input: {
+            title: formData.title,
+            actualResult: formData.actualResult,
+            severity: formData.severity,
+          },
+        },
+      });
+    } else {
+      await createDefect({
+        variables: {
+          input: {
+            title: formData.title,
+            actualResult: formData.actualResult,
+            severity: formData.severity,
+            createdById,
+            projectId,
+          },
+        },
+      });
+    }
+
+    setModalOpen(false);
+    setFormData({ id: '', title: '', actualResult: '', severity: 'NORMAL' });
+    setEditMode(false);
+    refetch();
   };
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', p: 3, gap: 3 }}>
-      <AppSnackbar
-        open={snackbar.open}
-        message={snackbar.message}
-        severity={snackbar.severity}
-        onClose={() => setSnackbar({ ...snackbar, open: false })}
-      />
+    <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <Typography variant="h1">Дефекты</Typography>
       <Box sx={{ display: 'flex', gap: 1 }}>
-        <Typography onClick={() => showSnackbar('Аккаунт успешно создан', 'success')} variant="h1">
-          Дефекты
-        </Typography>
-      </Box>
-      <Box sx={{ display: 'flex', gap: 1 }}>
-        <Button variant="contained" size="small">
-          <Typography variant="body1" color="white" onClick={() => router.push('defect-create')}>
+        <Button
+          variant="contained"
+          onClick={() => {
+            setEditMode(false);
+            setFormData({ id: '', title: '', actualResult: '', severity: 'NORMAL' });
+            setModalOpen(true);
+          }}
+        >
+          <Typography variant="body1" color="white">
             Новый дефект
           </Typography>
         </Button>
-        <TextField size="small" label="Поиск" />
-        <Select
-          sx={{ width: '250px' }}
+        <TextField
+          label="Поиск"
           size="small"
-          multiple
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onBlur={() => refetch()}
+        />
+        <Select
+          size="small"
           displayEmpty
-          value={personName}
-          onChange={handleChange}
-          input={<OutlinedInput />}
-          renderValue={(selected) => {
-            if (selected.length === 0) {
-              return <em>Серьезность не выбрана</em>;
-            }
-
-            return selected.join(', ');
+          value={severityFilter}
+          onChange={(e) => {
+            setSeverityFilter(e.target.value as Severity);
+            refetch();
           }}
-          MenuProps={MenuProps}
+          input={<OutlinedInput />}
         >
-          <MenuItem disabled value="">
-            <em>Серьезность не выбрана</em>
+          <MenuItem value="">
+            <em>Все уровни</em>
           </MenuItem>
-          {names.map((name) => (
-            <MenuItem key={name} value={name} style={getStyles(name, personName)}>
-              {name}
+          {SEVERITY_OPTIONS.map((opt) => (
+            <MenuItem key={opt.value} value={opt.value}>
+              {opt.label}
             </MenuItem>
           ))}
         </Select>
       </Box>
-      <Paper
-        sx={{
-          width: '100%',
-          overflow: 'hidden',
-        }}
-      >
-        <TableContainer sx={{ maxHeight: 440 }}>
-          <Table stickyHeader>
-            <TableHead color="background.default">
+
+      <Paper>
+        <TableContainer>
+          <Table>
+            <TableHead>
               <TableRow>
                 <TableCell>Название</TableCell>
+                <TableCell>Результат</TableCell>
                 <TableCell>Автор</TableCell>
-                <TableCell>Серьезность</TableCell>
-                <TableCell>Веха</TableCell>
+                <TableCell>Серьёзность</TableCell>
                 <TableCell>Дата создания</TableCell>
-                <TableCell sx={{ widht: '30px' }}></TableCell>
+                <TableCell align="right">Действия</TableCell>
               </TableRow>
             </TableHead>
-            <TableBody color="background.paper">
-              <TableRow hover>
-                <TableCell>testewts</TableCell>
-                <TableCell>
-                  <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Avatar
-                      sx={{ width: '24px', height: '24px' }}
-                      variant="rounded"
-                      src="https://d2cxucsjd6xvsd.cloudfront.net/public/user/thumb/cbf6ae7f66b7dd7c5792dd123c3b74fe.jpg"
-                    >
-                      MI
-                    </Avatar>
-                    <Typography variant="body2">Михаил Вялков</Typography>
-                  </Box>
-                </TableCell>
-                <TableCell>
-                  <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
-                    <KeyboardDoubleArrowUpIcon sx={{ color: '#D0021B' }} />
-                    <Typography variant="body2">Критичный</Typography>
-                  </Box>
-                </TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>
-                  <IconButton onClick={handleClick} sx={{ p: 0 }}>
-                    <MoreVertIcon sx={{ color: 'white' }} />
-                  </IconButton>
-                  <Menu anchorEl={anchorEl} open={open} onClose={handleClose}>
-                    <MenuItem onClick={handleClose}>
-                      <EditIcon />
-                      Изменить
-                    </MenuItem>
-                    <MenuItem onClick={handleClose}>
-                      <DeleteIcon />
-                      Удалить
-                    </MenuItem>
-                  </Menu>
-                </TableCell>
-              </TableRow>
-              <TableRow hover>
-                <TableCell>testewts</TableCell>
-                <TableCell>
-                  <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Avatar
-                      sx={{ width: '24px', height: '24px' }}
-                      variant="rounded"
-                      src="https://d2cxucsjd6xvsd.cloudfront.net/public/user/thumb/cbf6ae7f66b7dd7c5792dd123c3b74fe.jpg"
-                    >
-                      MI
-                    </Avatar>
-                    <Typography variant="body2">Михаил Вялков</Typography>
-                  </Box>
-                </TableCell>
-                <TableCell>
-                  <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
-                    <KeyboardDoubleArrowUpIcon sx={{ color: '#D0021B' }} />
-                    <Typography variant="body2">Критичный</Typography>
-                  </Box>
-                </TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>
-                  <IconButton onClick={handleClick} sx={{ p: 0 }}>
-                    <MoreVertIcon sx={{ color: 'white' }} />
-                  </IconButton>
-                  <Menu anchorEl={anchorEl} open={open} onClose={handleClose}>
-                    <MenuItem onClick={handleClose}>
-                      <EditIcon />
-                      Изменить
-                    </MenuItem>
-                    <MenuItem onClick={handleClose}>
-                      <DeleteIcon />
-                      Удалить
-                    </MenuItem>
-                  </Menu>
-                </TableCell>
-              </TableRow>
-              <TableRow hover>
-                <TableCell>testewts</TableCell>
-                <TableCell>
-                  <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Avatar
-                      sx={{ width: '24px', height: '24px' }}
-                      variant="rounded"
-                      src="https://d2cxucsjd6xvsd.cloudfront.net/public/user/thumb/cbf6ae7f66b7dd7c5792dd123c3b74fe.jpg"
-                    >
-                      MI
-                    </Avatar>
-                    <Typography variant="body2">Михаил Вялков</Typography>
-                  </Box>
-                </TableCell>
-                <TableCell>
-                  <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
-                    <KeyboardDoubleArrowUpIcon sx={{ color: '#D0021B' }} />
-                    <Typography variant="body2">Критичный</Typography>
-                  </Box>
-                </TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>
-                  <IconButton onClick={handleClick} sx={{ p: 0 }}>
-                    <MoreVertIcon sx={{ color: 'white' }} />
-                  </IconButton>
-                  <Menu anchorEl={anchorEl} open={open} onClose={handleClose}>
-                    <MenuItem onClick={handleClose}>
-                      <EditIcon />
-                      Изменить
-                    </MenuItem>
-                    <MenuItem onClick={handleClose}>
-                      <DeleteIcon />
-                      Удалить
-                    </MenuItem>
-                  </Menu>
-                </TableCell>
-              </TableRow>
+
+            <TableBody>
+              {defects.map((defect) => {
+                const sev = SEVERITY_OPTIONS.find((o) => o.value === defect.severity)!;
+                return (
+                  <TableRow key={defect.id} hover>
+                    <TableCell>{defect.title}</TableCell>
+                    <TableCell>{defect.actualResult}</TableCell>
+                    <TableCell>
+                      <UserName userId={defect.createdById} />
+                    </TableCell>
+                    <TableCell>
+                      <Box
+                        sx={{ display: 'flex', gap: 0.5, alignItems: 'center', color: sev.color }}
+                      >
+                        {sev.icon}
+                        <Typography variant="body2">{sev.label}</Typography>
+                      </Box>
+                    </TableCell>
+                    <TableCell>{new Date(defect.createdAt).toLocaleDateString('ru-RU')}</TableCell>
+                    <TableCell align="right">
+                      <IconButton onClick={(e) => openMenu(e, defect.id)}>
+                        <MoreVertIcon />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </TableContainer>
-        <TablePagination
-          component="div"
-          count={3}
-          page={page}
-          onPageChange={handleChangePage}
-          rowsPerPage={rowsPerPage}
-          rowsPerPageOptions={[5, 10, 25]}
-          onRowsPerPageChange={handleChangeRowsPerPage}
-        />
       </Paper>
+
+      <Menu anchorEl={menuAnchor} open={!!menuAnchor} onClose={closeMenu}>
+        <MenuItem
+          onClick={() => {
+            const defect = defects.find((d) => d.id === activeId);
+            if (defect) {
+              setEditMode(true);
+              setFormData({
+                id: defect.id,
+                title: defect.title,
+                actualResult: defect.actualResult,
+                severity: defect.severity,
+              });
+              setModalOpen(true);
+            }
+            closeMenu();
+          }}
+        >
+          <EditIcon fontSize="small" sx={{ mr: 1 }} /> Изменить
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            if (activeId) confirmDelete(activeId);
+          }}
+        >
+          <DeleteIcon fontSize="small" sx={{ mr: 1 }} /> Удалить
+        </MenuItem>
+      </Menu>
+
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)}>
+        <Box
+          sx={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: 500,
+            bgcolor: 'background.paper',
+            boxShadow: 24,
+            p: 4,
+            borderRadius: 2,
+          }}
+        >
+          <IconButton
+            sx={{ position: 'absolute', right: 8, top: 8 }}
+            onClick={() => setModalOpen(false)}
+          >
+            <CloseIcon />
+          </IconButton>
+          <Typography variant="h6" mb={2}>
+            {editMode ? 'Редактировать дефект' : 'Новый дефект'}
+          </Typography>
+          <Stack spacing={2}>
+            <TextField
+              required
+              label="Название"
+              fullWidth
+              value={formData.title}
+              onChange={(e) => setFormData((prev) => ({ ...prev, title: e.target.value }))}
+            />
+            <TextField
+              required
+              label="Актуальный результат"
+              fullWidth
+              multiline
+              rows={3}
+              value={formData.actualResult}
+              onChange={(e) => setFormData((prev) => ({ ...prev, actualResult: e.target.value }))}
+            />
+            <Select
+              fullWidth
+              value={formData.severity}
+              onChange={(e) =>
+                setFormData((prev) => ({ ...prev, severity: e.target.value as Severity }))
+              }
+            >
+              {SEVERITY_OPTIONS.map((opt) => (
+                <MenuItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </MenuItem>
+              ))}
+            </Select>
+            <Box display="flex" justifyContent="flex-end">
+              <Button variant="contained" onClick={handleSubmit}>
+                Сохранить
+              </Button>
+            </Box>
+          </Stack>
+        </Box>
+      </Modal>
+
+      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
+        <DialogTitle>Удалить дефект?</DialogTitle>
+        <DialogContent>
+          <Typography>Вы точно хотите удалить дефект? Это действие нельзя отменить.</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmOpen(false)}>Отмена</Button>
+          <Button color="error" onClick={handleDelete}>
+            Удалить
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
