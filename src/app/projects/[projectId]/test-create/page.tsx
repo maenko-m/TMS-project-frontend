@@ -1,7 +1,6 @@
 'use client';
 
-import React from 'react';
-import { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Box,
   Button,
@@ -10,22 +9,56 @@ import {
   MenuItem,
   InputLabel,
   FormControl,
-  Autocomplete,
-  Chip,
   Typography,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import { useQuery, useMutation, gql } from '@apollo/client';
+import { useParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 
-interface Param {
-  key: string;
-  value: string;
-}
+const TEST_SUITES_BY_PROJECT_ID = gql`
+  query testSuitesByProjectId($projectId: UUID!) {
+    testSuitesByProjectId(projectId: $projectId) {
+      nodes {
+        id
+        name
+        description
+        preconditions
+        testCasesCount
+      }
+    }
+  }
+`;
+
+const CREATE_TEST_CASE = gql`
+  mutation createTestCase($input: TestCaseCreateInput!) {
+    createTestCase(input: $input)
+  }
+`;
+
+const CREATE_TEST_STEP = gql`
+  mutation createTestStep($input: TestStepCreateInput!) {
+    createTestStep(input: $input)
+  }
+`;
+
+const ME_QUERY = gql`
+  query me {
+    me {
+      id
+    }
+  }
+`;
+
 interface Step {
   description: string;
   expected: string;
 }
 
 export default function CreateTestCase() {
+  const params = useParams();
+  const projectId = params.projectId as string;
+
   const [suiteId, setSuiteId] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -34,45 +67,75 @@ export default function CreateTestCase() {
   const [status, setStatus] = useState('DRAFT');
   const [priority, setPriority] = useState('LOW');
   const [severity, setSeverity] = useState('MINOR');
-
-  const [parameters, setParameters] = useState<Param[]>([]);
   const [steps, setSteps] = useState<Step[]>([]);
+  const [suiteOptions, setSuiteOptions] = useState<{ id: string; name: string }[]>([]);
 
-  const [tags, setTags] = useState<string[]>([]);
-  const [allTags, setAllTags] = useState<string[]>(['smoke', 'regression']);
+  const { data: suitesData } = useQuery(TEST_SUITES_BY_PROJECT_ID, {
+    variables: { projectId },
+  });
 
-  const suiteOptions = ['4', '5', '6'];
+  const { data: meData } = useQuery(ME_QUERY);
+  const createdById = meData?.me?.id;
 
-  const handleAddParam = () => setParameters([...parameters, { key: '', value: '' }]);
+  const [createTestCase] = useMutation(CREATE_TEST_CASE);
+  const [createTestStep] = useMutation(CREATE_TEST_STEP);
+
+  useEffect(() => {
+    if (suitesData?.testSuitesByProjectId?.nodes) {
+      setSuiteOptions(suitesData.testSuitesByProjectId.nodes);
+    }
+  }, [suitesData]);
+
   const handleAddStep = () => setSteps([...steps, { description: '', expected: '' }]);
-
-  const handleParamChange = (index: number, field: keyof Param, value: string) => {
-    const updated = [...parameters];
-    updated[index][field] = value;
-    setParameters(updated);
-  };
 
   const handleStepChange = (index: number, field: keyof Step, value: string) => {
     const updated = [...steps];
     updated[index][field] = value;
     setSteps(updated);
   };
+  const router = useRouter();
 
-  const handleSubmit = () => {
-    const payload = {
-      suiteId,
-      title,
-      description,
-      preconditions,
-      postconditions,
-      status,
-      priority,
-      severity,
-      parameters: Object.fromEntries(parameters.map((p) => [p.key, p.value])),
-      tags,
-      steps,
-    };
-    console.log('Submitted', payload);
+  const handleSubmit = async () => {
+    try {
+      const { data } = await createTestCase({
+        variables: {
+          input: {
+            projectId,
+            suiteId: suiteId,
+            title,
+            description,
+            preconditions,
+            postconditions,
+            status,
+            priority,
+            severity,
+            createdById,
+          },
+        },
+      });
+
+      const testCaseId = data.createTestCase;
+
+      await Promise.all(
+        steps.map((step, index) =>
+          createTestStep({
+            variables: {
+              input: {
+                testCaseId,
+                description: step.description,
+                expectedResult: step.expected,
+                position: index + 1,
+              },
+            },
+          }),
+        ),
+      );
+
+      console.log('Test case and steps created successfully');
+      router.push('repository');
+    } catch (err) {
+      console.error('Error creating test case:', err);
+    }
   };
 
   const fieldSx = { flex: '1 1 200px', backgroundColor: 'background.paper' };
@@ -107,9 +170,9 @@ export default function CreateTestCase() {
             label="Тестовый набор"
             onChange={(e) => setSuiteId(e.target.value)}
           >
-            {suiteOptions.map((id) => (
+            {suiteOptions.map(({ id, name }) => (
               <MenuItem key={id} value={id}>
-                {id}
+                {name}
               </MenuItem>
             ))}
           </Select>
@@ -118,7 +181,7 @@ export default function CreateTestCase() {
         <FormControl sx={fieldSx}>
           <InputLabel>Status</InputLabel>
           <Select value={status} label="Статус" onChange={(e) => setStatus(e.target.value)}>
-            {['DRAFT', 'READY'].map((val) => (
+            {['DRAFT', 'ACTIVE', 'ARCHIVED'].map((val) => (
               <MenuItem key={val} value={val}>
                 {val}
               </MenuItem>
@@ -176,54 +239,6 @@ export default function CreateTestCase() {
           onChange={(e) => setPostconditions(e.target.value)}
           sx={{ flex: '1 1 48%', backgroundColor: 'background.paper' }}
         />
-      </Box>
-
-      <Autocomplete
-        multiple
-        freeSolo
-        options={allTags}
-        value={tags}
-        onChange={(e, newTags) => setTags(newTags as string[])}
-        renderTags={(value, getTagProps) =>
-          value.map((option, index) => (
-            <Chip variant="outlined" label={option} {...getTagProps({ index })} />
-          ))
-        }
-        renderInput={(params) => (
-          <TextField
-            {...params}
-            label="Тэги"
-            placeholder="Добавить или выбрать тег"
-            sx={{ backgroundColor: 'background.paper' }}
-          />
-        )}
-      />
-
-      <Box>
-        <Typography variant="h6" mb={1}>
-          Параметры
-        </Typography>
-        <Button startIcon={<AddIcon />} onClick={handleAddParam}>
-          Добавить параметр
-        </Button>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 1 }}>
-          {parameters.map((param, index) => (
-            <Box key={index} sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-              <TextField
-                placeholder="Название параметра"
-                value={param.key}
-                onChange={(e) => handleParamChange(index, 'key', e.target.value)}
-                sx={{ flex: '1 1 48%', backgroundColor: 'background.paper' }}
-              />
-              <TextField
-                placeholder="Значение"
-                value={param.value}
-                onChange={(e) => handleParamChange(index, 'value', e.target.value)}
-                sx={{ flex: '1 1 48%', backgroundColor: 'background.paper' }}
-              />
-            </Box>
-          ))}
-        </Box>
       </Box>
 
       <Box>

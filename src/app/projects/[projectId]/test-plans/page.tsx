@@ -1,50 +1,63 @@
 'use client';
 
-import React, { use } from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   Button,
-  IconButton,
-  Menu,
-  MenuItem,
   Paper,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
-  TablePagination,
   TableRow,
   TextField,
   Typography,
 } from '@mui/material';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
+import { gql, useQuery } from '@apollo/client';
+import { use } from 'react';
+import { useRouter } from 'next/navigation';
+
+const TEST_PLANS_BY_PROJECT_ID = gql`
+  query testPlansByProjectId($projectId: UUID!, $filter: TestPlanFilterInput) {
+    testPlansByProjectId(projectId: $projectId, filter: $filter) {
+      nodes {
+        id
+        name
+        description
+        createdAt
+        testCases {
+          id
+        }
+        createdById
+      }
+    }
+  }
+`;
+
+const USER_BY_ID = gql`
+  query userById($id: UUID!) {
+    userById(id: $id) {
+      fullName
+    }
+  }
+`;
 
 export default function TestCasesPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = use(params);
+  const router = useRouter();
+  const [search, setSearch] = useState('');
 
-  const [page, setPage] = React.useState(0);
-  const [rowsPerPage, setRowsPerPage] = React.useState(5);
+  const { data, loading, error } = useQuery(TEST_PLANS_BY_PROJECT_ID, {
+    variables: {
+      projectId,
+      filter: search ? { name: search } : undefined,
+    },
+  });
 
-  const handleChangePage = (e: unknown, newPage: number) => {
-    setPage(newPage);
-  };
+  if (error) return <Typography color="error">Ошибка: {error.message}</Typography>;
 
-  const handleChangeRowsPerPage = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setRowsPerPage(parseInt(e.target.value, 10));
-    setPage(0);
-  };
-
-  const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
-  const open = Boolean(anchorEl);
-  const handleClick = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
-  };
-  const handleClose = () => {
-    setAnchorEl(null);
-  };
+  const testPlans = data?.testPlansByProjectId?.nodes || [];
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', p: 3, gap: 3 }}>
@@ -53,110 +66,62 @@ export default function TestCasesPage({ params }: { params: Promise<{ projectId:
       </Box>
       <Box sx={{ display: 'flex', gap: 1 }}>
         <Button variant="contained" size="small">
-          <Typography variant="body1" color="white">
+          <Typography
+            variant="body1"
+            color="white"
+            onClick={() => router.push('test-plans/create')}
+          >
             Новый тест-план
           </Typography>
         </Button>
-        <TextField size="small" label="Поиск" />
-      </Box>
-      <Paper
-        sx={{
-          width: '100%',
-          overflow: 'hidden',
-        }}
-      >
-        <TableContainer sx={{ maxHeight: 440 }}>
-          <Table stickyHeader>
-            <TableHead color="background.default">
-              <TableRow>
-                <TableCell>Название</TableCell>
-                <TableCell>Дата создания</TableCell>
-                <TableCell>Дата обновления</TableCell>
-                <TableCell>Время прохождения</TableCell>
-                <TableCell>Кол-во кейсов</TableCell>
-                <TableCell sx={{ width: '30px' }}></TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody color="background.paper">
-              <TableRow hover>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>
-                  <IconButton onClick={handleClick} sx={{ p: 0 }}>
-                    <MoreVertIcon sx={{ color: 'white' }} />
-                  </IconButton>
-                  <Menu anchorEl={anchorEl} open={open} onClose={handleClose}>
-                    <MenuItem onClick={handleClose}>
-                      <EditIcon />
-                      Изменить
-                    </MenuItem>
-                    <MenuItem onClick={handleClose}>
-                      <DeleteIcon />
-                      Удалить
-                    </MenuItem>
-                  </Menu>
-                </TableCell>
-              </TableRow>
-              <TableRow hover>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>
-                  <IconButton onClick={handleClick} sx={{ p: 0 }}>
-                    <MoreVertIcon sx={{ color: 'white' }} />
-                  </IconButton>
-                  <Menu anchorEl={anchorEl} open={open} onClose={handleClose}>
-                    <MenuItem onClick={handleClose}>
-                      <EditIcon />
-                      Изменить
-                    </MenuItem>
-                    <MenuItem onClick={handleClose}>
-                      <DeleteIcon />
-                      Удалить
-                    </MenuItem>
-                  </Menu>
-                </TableCell>
-              </TableRow>
-              <TableRow hover>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>
-                  <IconButton onClick={handleClick} sx={{ p: 0 }}>
-                    <MoreVertIcon sx={{ color: 'white' }} />
-                  </IconButton>
-                  <Menu anchorEl={anchorEl} open={open} onClose={handleClose}>
-                    <MenuItem onClick={handleClose}>
-                      <EditIcon />
-                      Изменить
-                    </MenuItem>
-                    <MenuItem onClick={handleClose}>
-                      <DeleteIcon />
-                      Удалить
-                    </MenuItem>
-                  </Menu>
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </TableContainer>
-        <TablePagination
-          component="div"
-          count={3}
-          page={page}
-          onPageChange={handleChangePage}
-          rowsPerPage={rowsPerPage}
-          rowsPerPageOptions={[5, 10, 25]}
-          onRowsPerPageChange={handleChangeRowsPerPage}
+        <TextField
+          size="small"
+          label="Поиск"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
         />
-      </Paper>
+      </Box>
+      {loading ? (
+        <Typography>Загрузка...</Typography>
+      ) : (
+        <Paper sx={{ width: '100%', overflow: 'hidden' }}>
+          <TableContainer sx={{ maxHeight: 440 }}>
+            <Table stickyHeader>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Название</TableCell>
+                  <TableCell>Автор</TableCell>
+                  <TableCell>Дата создания</TableCell>
+                  <TableCell>Кол-во кейсов</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {testPlans.map((plan: any) => (
+                  <TestPlanRow key={plan.id} plan={plan} />
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Paper>
+      )}
     </Box>
+  );
+}
+
+function TestPlanRow({ plan }: { plan: any }) {
+  const router = useRouter();
+
+  const { data } = useQuery(USER_BY_ID, {
+    variables: { id: plan.createdById },
+    skip: !plan.createdById,
+  });
+
+  return (
+    <TableRow hover onClick={() => router.push(`test-plans/${plan.id}`)}>
+      <TableCell>{plan.name}</TableCell>
+      <TableCell>{data?.userById?.fullName || '—'}</TableCell>
+      <TableCell>{new Date(plan.createdAt).toLocaleDateString()}</TableCell>
+      <TableCell>{plan.testCases.length}</TableCell>
+    </TableRow>
   );
 }

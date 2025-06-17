@@ -1,74 +1,66 @@
 'use client';
 
-import React, { use } from 'react';
+import React, { use, useState } from 'react';
 import {
-  Avatar,
   Box,
   Button,
-  IconButton,
-  Menu,
-  MenuItem,
-  Modal,
   Paper,
-  Stack,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
-  TablePagination,
   TableRow,
   TextField,
   Typography,
 } from '@mui/material';
 import StatusBar from '@/components/molecules/StatusBar';
 import StatusChip from '@/components/atoms/StatusChip';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
+import { gql, useQuery } from '@apollo/client';
+import { useRouter } from 'next/navigation';
+
+const TEST_RUNS_BY_PROJECT_ID = gql`
+  query testRunsByProjectId($projectId: UUID!, $filter: TestRunFilterInput) {
+    testRunsByProjectId(projectId: $projectId, filter: $filter) {
+      nodes {
+        id
+        name
+        status
+        createdAt
+        testRunTestCases {
+          status
+        }
+      }
+    }
+  }
+`;
+
+type Status = 'PASSED' | 'FAILED' | 'SKIPPED';
 
 export default function TestRunsPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = use(params);
+  const [search, setSearch] = useState('');
 
-  const [page, setPage] = React.useState(0);
-  const [rowsPerPage, setRowsPerPage] = React.useState(5);
+  const router = useRouter();
 
-  const handleChangePage = (e: unknown, newPage: number) => {
-    setPage(newPage);
-  };
-
-  const handleChangeRowsPerPage = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setRowsPerPage(parseInt(e.target.value, 10));
-    setPage(0);
-  };
-
-  const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
-  const open = Boolean(anchorEl);
-  const handleClick = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
-  };
-  const handleClose = () => {
-    setAnchorEl(null);
-  };
-
-  const [formOpen, setFormOpen] = React.useState(false);
-  const [formData, setFormData] = React.useState({
-    title: '',
-    description: '',
-    preconditions: '',
+  const { data, loading } = useQuery(TEST_RUNS_BY_PROJECT_ID, {
+    variables: {
+      projectId,
+      filter: search ? { name: search } : undefined,
+    },
   });
 
-  const handleFormOpen = () => setFormOpen(true);
-  const handleFormClose = () => setFormOpen(false);
-
-  const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleFormSubmit = () => {
-    console.log('Данные формы:', formData);
-    handleClose();
+  const countStatuses = (cases: any[]) => {
+    const summary: Record<Status, number> = {
+      PASSED: 0,
+      FAILED: 0,
+      SKIPPED: 0,
+    };
+    cases.forEach((tc) => {
+      const status = tc.status as Status;
+      if (status in summary) summary[status]++;
+    });
+    return summary;
   };
 
   return (
@@ -78,205 +70,52 @@ export default function TestRunsPage({ params }: { params: Promise<{ projectId: 
       </Box>
       <Box sx={{ display: 'flex', gap: 1 }}>
         <Button variant="contained" size="small">
-          <Typography variant="body1" color="white">
+          <Typography variant="body1" color="white" onClick={() => router.push('test-runs/create')}>
             Новый тест-ран
           </Typography>
         </Button>
-        <TextField size="small" label="Поиск" />
-      </Box>
-      <Paper
-        sx={{
-          width: '100%',
-          overflow: 'hidden',
-        }}
-      >
-        <TableContainer sx={{ maxHeight: 440 }}>
-          <Table stickyHeader>
-            <TableHead color="background.default">
-              <TableRow>
-                <TableCell>Название</TableCell>
-                <TableCell>Статус</TableCell>
-                <TableCell>Автор</TableCell>
-                <TableCell>Общее время</TableCell>
-                <TableCell>Статистика</TableCell>
-                <TableCell sx={{ width: '30px' }}></TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody color="background.paper">
-              <TableRow hover>
-                <TableCell>testewts</TableCell>
-                <TableCell>
-                  <StatusChip status="в процессе" />
-                </TableCell>
-                <TableCell>
-                  <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Avatar
-                      sx={{ width: '24px', height: '24px' }}
-                      variant="rounded"
-                      src="https://d2cxucsjd6xvsd.cloudfront.net/public/user/thumb/cbf6ae7f66b7dd7c5792dd123c3b74fe.jpg"
-                    >
-                      MI
-                    </Avatar>
-                    <Typography variant="body2">Михаил Вялков</Typography>
-                  </Box>
-                </TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>
-                  <StatusBar errors={3} success={2} skipped={5} />
-                </TableCell>
-                <TableCell>
-                  <IconButton onClick={handleClick} sx={{ p: 0 }}>
-                    <MoreVertIcon sx={{ color: 'white' }} />
-                  </IconButton>
-                  <Menu anchorEl={anchorEl} open={open} onClose={handleClose}>
-                    <MenuItem onClick={handleClose}>
-                      <EditIcon />
-                      Изменить
-                    </MenuItem>
-                    <MenuItem onClick={handleClose}>
-                      <DeleteIcon />
-                      Удалить
-                    </MenuItem>
-                  </Menu>
-                </TableCell>
-              </TableRow>
-              <TableRow hover>
-                <TableCell>testewts</TableCell>
-                <TableCell>
-                  <StatusChip status="в процессе" />
-                </TableCell>
-                <TableCell>
-                  <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Avatar
-                      sx={{ width: '24px', height: '24px' }}
-                      variant="rounded"
-                      src="https://d2cxucsjd6xvsd.cloudfront.net/public/user/thumb/cbf6ae7f66b7dd7c5792dd123c3b74fe.jpg"
-                    >
-                      MI
-                    </Avatar>
-                    <Typography variant="body2">Михаил Вялков</Typography>
-                  </Box>
-                </TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>
-                  <StatusBar errors={3} success={2} skipped={5} />
-                </TableCell>
-                <TableCell>
-                  <IconButton onClick={handleClick} sx={{ p: 0 }}>
-                    <MoreVertIcon sx={{ color: 'white' }} />
-                  </IconButton>
-                  <Menu anchorEl={anchorEl} open={open} onClose={handleClose}>
-                    <MenuItem onClick={handleClose}>
-                      <EditIcon />
-                      Изменить
-                    </MenuItem>
-                    <MenuItem onClick={handleClose}>
-                      <DeleteIcon />
-                      Удалить
-                    </MenuItem>
-                  </Menu>
-                </TableCell>
-              </TableRow>
-              <TableRow hover>
-                <TableCell>testewts</TableCell>
-                <TableCell>
-                  <StatusChip status="в процессе" />
-                </TableCell>
-                <TableCell>
-                  <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Avatar
-                      sx={{ width: '24px', height: '24px' }}
-                      variant="rounded"
-                      src="https://d2cxucsjd6xvsd.cloudfront.net/public/user/thumb/cbf6ae7f66b7dd7c5792dd123c3b74fe.jpg"
-                    >
-                      MI
-                    </Avatar>
-                    <Typography variant="body2">Михаил Вялков</Typography>
-                  </Box>
-                </TableCell>
-                <TableCell>testewts</TableCell>
-                <TableCell>
-                  <StatusBar errors={3} success={2} skipped={5} />
-                </TableCell>
-                <TableCell>
-                  <IconButton onClick={handleClick} sx={{ p: 0 }}>
-                    <MoreVertIcon sx={{ color: 'white' }} />
-                  </IconButton>
-                  <Menu anchorEl={anchorEl} open={open} onClose={handleClose}>
-                    <MenuItem onClick={handleClose}>
-                      <EditIcon />
-                      Изменить
-                    </MenuItem>
-                    <MenuItem onClick={handleClose}>
-                      <DeleteIcon />
-                      Удалить
-                    </MenuItem>
-                  </Menu>
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </TableContainer>
-        <TablePagination
-          component="div"
-          count={3}
-          page={page}
-          onPageChange={handleChangePage}
-          rowsPerPage={rowsPerPage}
-          rowsPerPageOptions={[5, 10, 25]}
-          onRowsPerPageChange={handleChangeRowsPerPage}
+        <TextField
+          size="small"
+          label="Поиск"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
         />
-      </Paper>
-      <Modal open={open} onClose={handleFormClose}>
-        <Box
-          sx={{
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            width: 400,
-            bgcolor: 'background.paper',
-            boxShadow: 24,
-            p: 4,
-            borderRadius: 2,
-          }}
-        >
-          <Typography variant="h6" mb={2}>
-            Новый тестовый набор
-          </Typography>
-          <Stack spacing={2}>
-            <TextField
-              name="title"
-              label="Название"
-              fullWidth
-              value={formData.title}
-              onChange={handleFormChange}
-            />
-            <TextField
-              name="description"
-              label="Описание"
-              multiline
-              rows={3}
-              fullWidth
-              value={formData.description}
-              onChange={handleFormChange}
-            />
-            <TextField
-              name="preconditions"
-              label="Preconditions"
-              fullWidth
-              value={formData.preconditions}
-              onChange={handleFormChange}
-            />
-            <Stack direction="row" spacing={1} justifyContent="flex-end">
-              <Button onClick={handleClose}>Отмена</Button>
-              <Button variant="contained" onClick={handleFormSubmit}>
-                Сохранить
-              </Button>
-            </Stack>
-          </Stack>
-        </Box>
-      </Modal>
+      </Box>
+      {loading ? (
+        <Typography>Загрузка...</Typography>
+      ) : (
+        <Paper sx={{ width: '100%', overflow: 'hidden' }}>
+          <TableContainer sx={{ maxHeight: 440 }}>
+            <Table stickyHeader>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Название</TableCell>
+                  <TableCell>Статус</TableCell>
+                  <TableCell>Дата создания</TableCell>
+                  <TableCell>Статистика</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {data?.testRunsByProjectId?.nodes.map((run: any) => {
+                  const { PASSED, FAILED, SKIPPED } = countStatuses(run.testRunTestCases);
+                  return (
+                    <TableRow key={run.id} hover onClick={() => router.push(`test-runs/${run.id}`)}>
+                      <TableCell>{run.name}</TableCell>
+                      <TableCell>
+                        <StatusChip status={run.status === 'ACTIVE' ? 'в процессе' : 'пройден'} />
+                      </TableCell>
+                      <TableCell>{new Date(run.createdAt).toLocaleString()}</TableCell>
+                      <TableCell>
+                        <StatusBar success={PASSED} errors={FAILED} skipped={SKIPPED} />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Paper>
+      )}
     </Box>
   );
 }

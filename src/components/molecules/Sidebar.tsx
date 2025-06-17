@@ -20,29 +20,26 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import BugReportIcon from '@mui/icons-material/BugReport';
 import TerrainIcon from '@mui/icons-material/Terrain';
 import LocalOfferIcon from '@mui/icons-material/LocalOffer';
-import AttachFileIcon from '@mui/icons-material/AttachFile';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import SettingsIcon from '@mui/icons-material/Settings';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Project } from '@/features/projects/types';
+import { gql, useQuery } from '@apollo/client';
 
-const project: Project = {
-  createdAt: 'string',
-  defectsCount: 1,
-  description: 'string',
-  accessType: 'private',
-  id: 'string2',
-  name: 'string',
-  ownerFullName: 'string',
-  ownerId: 'string',
-  projectUsersCount: 1,
-  testCasesCount: 1,
-  updatedAt: 'string',
-};
+const PROJECT_QUERY = gql`
+  query ProjectById($id: UUID!) {
+    projectById(id: $id) {
+      name
+    }
+  }
+`;
 
 export default function Sidebar({ projectId }: { projectId: string }) {
   const pathname = usePathname();
+
+  const { data: projectData, loading: loading } = useQuery(PROJECT_QUERY, {
+    variables: { id: projectId },
+  });
 
   const getFullPath = (pagename: string) => {
     return `/projects/${projectId}${pagename}`;
@@ -76,12 +73,15 @@ export default function Sidebar({ projectId }: { projectId: string }) {
               borderBottom: '3px solid #403F3F',
             }}
           >
-            <Avatar variant="rounded" src={project.iconBase64} sx={{ width: 32, height: 32 }}>
+            <Avatar variant="rounded" sx={{ width: 32, height: 32 }}>
               <Typography variant="caption" color="textPrimary">
-                {(project.name[0] + project.name[1]).toUpperCase()}
+                {!loading &&
+                  (projectData.projectById.name[0] + projectData.projectById.name[1]).toUpperCase()}
               </Typography>
             </Avatar>
-            <Typography variant="body1">{project.name}</Typography>
+            <Typography variant="body1">
+              {loading ? 'Загрузка...' : projectData.projectById.name}
+            </Typography>
           </Box>
         </div>
         <div>
@@ -215,19 +215,6 @@ export default function Sidebar({ projectId }: { projectId: string }) {
                       <LocalOfferIcon />
                     </ListItemIcon>
                     <ListItemText primary="Тэги" />
-                  </ListItemButton>
-                </ListItem>
-                <ListItem disablePadding>
-                  <ListItemButton
-                    sx={{ padding: '2px 8px' }}
-                    component={Link}
-                    href={getFullPath('/attachments')}
-                    selected={itemIsActive('/attachments')}
-                  >
-                    <ListItemIcon>
-                      <AttachFileIcon />
-                    </ListItemIcon>
-                    <ListItemText primary="Вложения" />
                   </ListItemButton>
                 </ListItem>
               </List>

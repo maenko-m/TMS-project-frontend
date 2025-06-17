@@ -1,3 +1,4 @@
+/* RepositoryPage.tsx */
 'use client';
 
 import React from 'react';
@@ -15,17 +16,16 @@ import {
   TextField,
   Typography,
   IconButton,
-  MenuItem,
-  Menu,
   Tooltip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
-import { use } from 'react';
-import { useMutation, useQuery } from '@apollo/client';
+import { useQuery, useMutation, useLazyQuery } from '@apollo/client';
 import { useRouter } from 'next/navigation';
 import FolderOpenOutlinedIcon from '@mui/icons-material/FolderOpenOutlined';
 import FolderCopyOutlinedIcon from '@mui/icons-material/FolderCopyOutlined';
-import MoreHorizOutlinedIcon from '@mui/icons-material/MoreHorizOutlined';
-import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -83,70 +83,83 @@ const DELETE_TEST_SUITE = gql`
 `;
 
 export default function RepositoryPage({ params }: { params: Promise<{ projectId: string }> }) {
-  const { projectId } = use(params);
+  const { projectId } = React.use(params);
   const router = useRouter();
 
+  const [selectedSuiteId, setSelectedSuiteId] = React.useState<string | null>(null);
+  const [currentSuite, setCurrentSuite] = React.useState<any>(null);
   const [testSuiteFormOpen, setTestSuiteFormOpen] = React.useState(false);
-  const [testSuiteFormData, setTestSuiteFormData] = React.useState({
+  const [testSuiteFormData, setTestSuiteFormData] = React.useState<any>({
     title: '',
     description: '',
     preconditions: '',
   });
+  const [editingSuite, setEditingSuite] = React.useState<any | null>(null);
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
 
-  const handleTestSuiteFormOpen = () => setTestSuiteFormOpen(true);
-  const handleTestSuiteFormClose = () => setTestSuiteFormOpen(false);
-
-  const handleTestSuiteFormChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
-  ) => {
-    const { name, value } = e.target;
-    setTestSuiteFormData((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleTestSuiteFormSubmit = () => {
-    console.log('Данные формы:', testSuiteFormData);
-    handleTestSuiteFormClose();
-  };
-
-  const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
-  const open = Boolean(anchorEl);
-
-  const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
-    setAnchorEl(event.currentTarget);
-  };
-
-  const handleClose = () => {
-    setAnchorEl(null);
-  };
-
-  const handleEdit = () => {
-    console.log('Изменить');
-    handleClose();
-  };
-
-  const handleDelete = () => {
-    console.log('Удалить');
-    handleClose();
-  };
-
-  const handleAddTestCase = () => {
-    console.log('Добавить тест-кейс');
-    handleClose();
-  };
-
-  const [selectedSuiteId, setSelectedSuiteId] = React.useState<string | null>(null);
-  const [currentSuite, setCurrentSuite] = React.useState<any>(null);
-
-  const { data: suiteData } = useQuery(TEST_SUITES_QUERY, { variables: { projectId } });
-  const { data: caseData } = useQuery(TEST_CASES_QUERY, {
-    variables: { projectId, filter: { suiteId: selectedSuiteId } },
-    skip: !selectedSuiteId,
+  const { data: suiteData, refetch: refetchSuites } = useQuery(TEST_SUITES_QUERY, {
+    variables: { projectId },
   });
+  const [fetchTestCases, { data: caseData }] = useLazyQuery(TEST_CASES_QUERY);
+  const [createTestSuite] = useMutation(CREATE_TEST_SUITE);
+  const [updateTestSuite] = useMutation(UPDATE_TEST_SUITE);
+  const [deleteTestSuite] = useMutation(DELETE_TEST_SUITE);
 
   const handleSelectSuite = (suite: any) => {
     setSelectedSuiteId(suite.id);
     setCurrentSuite(suite);
-    console.log(caseData);
+    fetchTestCases({ variables: { projectId, filter: { suiteId: suite.id } } });
+  };
+
+  const handleTestSuiteFormOpen = (suite: any = null) => {
+    setEditingSuite(suite);
+    if (suite) {
+      setTestSuiteFormData({
+        title: suite.name,
+        description: suite.description,
+        preconditions: suite.preconditions,
+      });
+    } else {
+      setTestSuiteFormData({ title: '', description: '', preconditions: '' });
+    }
+    setTestSuiteFormOpen(true);
+  };
+
+  const handleTestSuiteFormClose = () => {
+    setTestSuiteFormOpen(false);
+    setEditingSuite(null);
+  };
+
+  const handleTestSuiteFormChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setTestSuiteFormData({ ...testSuiteFormData, [e.target.name]: e.target.value });
+  };
+
+  const handleTestSuiteFormSubmit = async () => {
+    const input = {
+      projectId,
+      name: testSuiteFormData.title,
+      description: testSuiteFormData.description,
+      preconditions: testSuiteFormData.preconditions,
+    };
+
+    if (editingSuite) {
+      await updateTestSuite({ variables: { id: editingSuite.id, input } });
+    } else {
+      await createTestSuite({ variables: { input } });
+    }
+
+    refetchSuites();
+    handleTestSuiteFormClose();
+  };
+
+  const handleDelete = async () => {
+    if (currentSuite) {
+      await deleteTestSuite({ variables: { id: currentSuite.id } });
+      setSelectedSuiteId(null);
+      setCurrentSuite(null);
+      refetchSuites();
+      setConfirmOpen(false);
+    }
   };
 
   const getPriorityIcon = (priority: string) => {
@@ -205,8 +218,8 @@ export default function RepositoryPage({ params }: { params: Promise<{ projectId
         <Typography variant="h1">Репозиторий</Typography>
       </Box>
       <Box sx={{ display: 'flex', gap: 1 }}>
-        <Button variant="contained" size="small">
-          <Typography variant="body1" color="white" onClick={() => router.push('test-create')}>
+        <Button variant="contained" size="small" onClick={() => router.push('test-create')}>
+          <Typography variant="body1" color="white">
             Новый тест-кейс
           </Typography>
         </Button>
@@ -214,7 +227,7 @@ export default function RepositoryPage({ params }: { params: Promise<{ projectId
           variant="contained"
           size="small"
           sx={{ bgcolor: 'background.paper' }}
-          onClick={handleTestSuiteFormOpen}
+          onClick={() => handleTestSuiteFormOpen()}
         >
           <Typography variant="body1" color="white">
             Новый набор
@@ -238,23 +251,22 @@ export default function RepositoryPage({ params }: { params: Promise<{ projectId
             <Typography variant="h6">Тестовые наборы</Typography>
           </Box>
           <List>
-            {suiteData &&
-              suiteData.testSuitesByProjectId.nodes.map((suite: any) => (
-                <ListItem key={suite.id} disablePadding>
-                  <ListItemButton
-                    selected={suite.id === selectedSuiteId}
-                    onClick={() => handleSelectSuite(suite)}
-                  >
-                    <ListItemIcon>
-                      <FolderOpenOutlinedIcon />
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={suite.name}
-                      secondary={`Тест-кейсов: ${suite.testCasesCount}`}
-                    />
-                  </ListItemButton>
-                </ListItem>
-              ))}
+            {suiteData?.testSuitesByProjectId.nodes.map((suite: any) => (
+              <ListItem key={suite.id} disablePadding>
+                <ListItemButton
+                  selected={suite.id === selectedSuiteId}
+                  onClick={() => handleSelectSuite(suite)}
+                >
+                  <ListItemIcon>
+                    <FolderOpenOutlinedIcon />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={suite.name}
+                    secondary={`Тест-кейсов: ${suite.testCasesCount}`}
+                  />
+                </ListItemButton>
+              </ListItem>
+            ))}
           </List>
         </Paper>
 
@@ -272,64 +284,39 @@ export default function RepositoryPage({ params }: { params: Promise<{ projectId
             <>
               <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                 <Typography variant="h6">{currentSuite.name}</Typography>
-                <Button sx={{ color: 'white' }} onClick={handleClick}>
-                  <MoreHorizOutlinedIcon />
-                </Button>
-                <Menu
-                  anchorEl={anchorEl}
-                  open={open}
-                  onClose={handleClose}
-                  anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-                  transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-                >
-                  <MenuItem onClick={handleAddTestCase}>
-                    <ListItemIcon>
-                      <AddIcon fontSize="small" />
-                    </ListItemIcon>
-                    <ListItemText>Добавить тест-кейс</ListItemText>
-                  </MenuItem>
-
-                  <MenuItem onClick={handleEdit}>
-                    <ListItemIcon>
-                      <EditIcon fontSize="small" />
-                    </ListItemIcon>
-                    <ListItemText>Изменить</ListItemText>
-                  </MenuItem>
-
-                  <MenuItem onClick={handleDelete}>
-                    <ListItemIcon>
-                      <DeleteIcon fontSize="small" />
-                    </ListItemIcon>
-                    <ListItemText>Удалить</ListItemText>
-                  </MenuItem>
-                </Menu>
+                <IconButton onClick={() => handleTestSuiteFormOpen(currentSuite)}>
+                  <EditIcon />
+                </IconButton>
+                <IconButton onClick={() => setConfirmOpen(true)}>
+                  <DeleteIcon />
+                </IconButton>
               </Box>
               <Typography variant="body1" color="text.secondary" sx={{ mt: 2, mb: 2 }}>
-                {currentSuite.description}
+                Описание: {currentSuite.description}
               </Typography>
               <Typography variant="body1" color="text.secondary" sx={{ mt: 2, mb: 2 }}>
-                {currentSuite.preconditions}
+                Предусловия: {currentSuite.preconditions}
               </Typography>
-              <List>
-                {caseData &&
-                  caseData.testCasesByProjectId.nodes.map((tc: any) => (
-                    <ListItem key={tc.id} disablePadding>
-                      <ListItemButton onClick={() => router.push(`test/${tc.id}`)}>
-                        <ListItemIcon sx={{ minWidth: 'auto', mr: 0.5 }}>
-                          {getPriorityIcon(tc.priority)}
-                        </ListItemIcon>
-                        <ListItemIcon sx={{ minWidth: 'auto', mr: 0.5 }}>
-                          {getSeverityIcon(tc.severity)}
-                        </ListItemIcon>
-                        <ListItemText primary={tc.title} />
-                      </ListItemButton>
-                    </ListItem>
-                  ))}
+              <List sx={{ mt: 2 }}>
+                {caseData?.testCasesByProjectId.nodes.map((tc: any) => (
+                  <ListItem key={tc.id} disablePadding>
+                    <ListItemButton onClick={() => router.push(`repository/${tc.id}`)}>
+                      <ListItemIcon sx={{ minWidth: 'auto', mr: 0.5 }}>
+                        {getPriorityIcon(tc.priority)}
+                      </ListItemIcon>
+                      <ListItemIcon sx={{ minWidth: 'auto', mr: 0.5 }}>
+                        {getSeverityIcon(tc.severity)}
+                      </ListItemIcon>
+                      <ListItemText primary={tc.title} />
+                    </ListItemButton>
+                  </ListItem>
+                ))}
               </List>
             </>
           )}
         </Paper>
       </Box>
+
       <Modal open={testSuiteFormOpen} onClose={handleTestSuiteFormClose}>
         <Box
           sx={{
@@ -352,7 +339,7 @@ export default function RepositoryPage({ params }: { params: Promise<{ projectId
             <CloseIcon />
           </IconButton>
           <Typography variant="h6" mb={2}>
-            Новый тестовый набор
+            {editingSuite ? 'Редактировать' : 'Новый'} тестовый набор
           </Typography>
           <Stack spacing={2}>
             <TextField
@@ -391,6 +378,21 @@ export default function RepositoryPage({ params }: { params: Promise<{ projectId
           </Stack>
         </Box>
       </Modal>
+
+      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
+        <DialogTitle>Удалить тестовый набор?</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Вы точно хотите удалить этот тестовый набор? Это действие нельзя отменить.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmOpen(false)}>Отмена</Button>
+          <Button color="error" onClick={handleDelete}>
+            Удалить
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

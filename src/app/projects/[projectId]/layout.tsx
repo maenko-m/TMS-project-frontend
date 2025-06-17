@@ -18,7 +18,7 @@ export default function ProjectLayout({
   return (
     <Box sx={{ display: 'flex' }}>
       <Sidebar projectId={projectId} />
-      <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
+      <Box component="main" sx={{ flexGrow: 1, p: 3, height: '100vh' }}>
         {children}
       </Box>
     </Box>
