@@ -14,6 +14,9 @@ import {
   ListItemIcon,
   ListItemText,
   CircularProgress,
+  Divider,
+  ListItemButton,
+  Tooltip,
 } from '@mui/material';
 import { gql, useMutation, useQuery } from '@apollo/client';
 import { useRouter, useParams } from 'next/navigation';
@@ -21,6 +24,12 @@ import BugReportIcon from '@mui/icons-material/BugReport';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import PauseCircleFilledIcon from '@mui/icons-material/PauseCircleFilled';
+import ErrorIcon from '@mui/icons-material/Error';
+import WarningIcon from '@mui/icons-material/Warning';
+import InfoIcon from '@mui/icons-material/Info';
+import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import RemoveIcon from '@mui/icons-material/Remove';
 
 const TEST_RUN_BY_ID = gql`
   query testRunById($id: UUID!) {
@@ -97,12 +106,54 @@ export default function TestRunDetailsPage() {
   const [deleteTestRun, { loading: deleting }] = useMutation(DELETE_TEST_RUN, {
     variables: { id: testRunId },
     onCompleted() {
-      router.push('/test-runs'); // или куда нужно после удаления
+      router.push('test-runs');
     },
     onError(err) {
       console.error('Ошибка при удалении тест-рана:', err);
     },
   });
+
+  const getPriorityIcon = (priority: string) => {
+    const map = {
+      LOW: (
+        <Tooltip title="Приоритет: низкий">
+          <KeyboardArrowDownIcon color="info" />
+        </Tooltip>
+      ),
+      MEDIUM: (
+        <Tooltip title="Приоритет: средний">
+          <RemoveIcon color="warning" />
+        </Tooltip>
+      ),
+      HIGH: (
+        <Tooltip title="Приоритет: высокий">
+          <KeyboardArrowUpIcon color="error" />
+        </Tooltip>
+      ),
+    };
+    return map[priority as keyof typeof map];
+  };
+
+  const getSeverityIcon = (severity: string) => {
+    const map = {
+      MINOR: (
+        <Tooltip title="Серьёзность: незначительная">
+          <InfoIcon color="info" />
+        </Tooltip>
+      ),
+      MAJOR: (
+        <Tooltip title="Серьёзность: серьёзная">
+          <WarningIcon color="warning" />
+        </Tooltip>
+      ),
+      CRITICAL: (
+        <Tooltip title="Серьёзность: критическая">
+          <ErrorIcon color="error" />
+        </Tooltip>
+      ),
+    };
+    return map[severity as keyof typeof map];
+  };
 
   if (loading) return <CircularProgress />;
   if (error) return <Typography color="error">Ошибка загрузки данных: {error.message}</Typography>;
@@ -111,14 +162,15 @@ export default function TestRunDetailsPage() {
 
   return (
     <Box sx={{ p: 3, maxWidth: 800 }}>
-      <Typography variant="h4" mb={2}>
+      <Typography variant="h1" mb={2}>
         Тест-ран: {testRun.name}
       </Typography>
-      <Typography variant="subtitle1" mb={1}>
+      <Divider />
+      <Typography variant="subtitle1" mb={1} mt={1}>
         Описание: {testRun.description || '-'}
       </Typography>
       <Typography variant="body2" mb={1}>
-        Статус: {testRun.status}
+        Статус: {testRun.status === 'ACTIVE' ? 'В процессе' : 'Завершен'}
       </Typography>
       <Typography variant="body2" mb={1}>
         Создан: {new Date(testRun.createdAt).toLocaleString()}
@@ -136,14 +188,16 @@ export default function TestRunDetailsPage() {
       ) : (
         <List>
           {testRun.testRunTestCases.map(({ testCase, status }: any) => (
-            <ListItem key={testCase.id} onClick={() => router.push(`/test-cases/${testCase.id}`)}>
-              <ListItemIcon>{getStatusIcon(status)}</ListItemIcon>
-              <ListItemText
-                primary={testCase.title}
-                secondary={`Priority: ${testCase.priority || '-'}, Severity: ${
-                  testCase.severity || '-'
-                }`}
-              />
+            <ListItem key={testCase.id} disablePadding>
+              <ListItemButton onClick={() => router.push(`/test-cases/${testCase.id}`)}>
+                <ListItemIcon sx={{ minWidth: 'auto', mr: 0.5 }}>
+                  {getPriorityIcon(testCase.priority)}
+                </ListItemIcon>
+                <ListItemIcon sx={{ minWidth: 'auto', mr: 0.5 }}>
+                  {getSeverityIcon(testCase.severity)}
+                </ListItemIcon>
+                <ListItemText primary={testCase.title} />
+              </ListItemButton>
             </ListItem>
           ))}
         </List>
@@ -158,7 +212,7 @@ export default function TestRunDetailsPage() {
         <List>
           {testRun.defects.map(({ id, title, actualResult }: any) => (
             <ListItem key={id}>
-              <ListItemText primary={title} secondary={`Actual result: ${actualResult}`} />
+              <ListItemText primary={title} secondary={`Актуальный результат: ${actualResult}`} />
             </ListItem>
           ))}
         </List>

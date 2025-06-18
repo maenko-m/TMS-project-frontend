@@ -24,6 +24,7 @@ import ReportProblemIcon from '@mui/icons-material/ReportProblem';
 import WarningIcon from '@mui/icons-material/Warning';
 import ErrorIcon from '@mui/icons-material/Error';
 import { useRouter } from 'next/navigation';
+import InfoIcon from '@mui/icons-material/Info';
 
 const TEST_CASE_BY_ID = gql`
   query testCaseById($id: UUID!) {
@@ -128,7 +129,7 @@ const getEnumDisplay = (type: string, value: string) => {
       MINOR: {
         icon: (
           <Tooltip title="Незначительная">
-            <ReportProblemIcon color="info" />
+            <InfoIcon color="info" />
           </Tooltip>
         ),
         label: 'Незначительная',

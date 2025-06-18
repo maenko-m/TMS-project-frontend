@@ -43,11 +43,16 @@ export default function TestRunsPage({ params }: { params: Promise<{ projectId: 
 
   const router = useRouter();
 
-  const { data, loading } = useQuery(TEST_RUNS_BY_PROJECT_ID, {
+  const { data, loading, refetch } = useQuery(TEST_RUNS_BY_PROJECT_ID, {
     variables: {
       projectId,
       filter: search ? { name: search } : undefined,
+      fetchPolicy: 'network-only',
     },
+  });
+
+  React.useEffect(() => {
+    refetch();
   });
 
   const countStatuses = (cases: any[]) => {

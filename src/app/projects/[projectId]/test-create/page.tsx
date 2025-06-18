@@ -138,6 +138,24 @@ export default function CreateTestCase() {
     }
   };
 
+  const statusOptions = [
+    { value: 'DRAFT', label: 'Черновик' },
+    { value: 'ACTIVE', label: 'Активен' },
+    { value: 'ARCHIVED', label: 'Архив' },
+  ];
+
+  const priorityOptions = [
+    { value: 'LOW', label: 'Низкий' },
+    { value: 'MEDIUM', label: 'Средний' },
+    { value: 'HIGH', label: 'Высокий' },
+  ];
+
+  const severityOptions = [
+    { value: 'MINOR', label: 'Незначительная' },
+    { value: 'MAJOR', label: 'Серьёзная' },
+    { value: 'CRITICAL', label: 'Критическая' },
+  ];
+
   const fieldSx = { flex: '1 1 200px', backgroundColor: 'background.paper' };
 
   return (
@@ -164,7 +182,7 @@ export default function CreateTestCase() {
 
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
         <FormControl sx={fieldSx}>
-          <InputLabel>Suite</InputLabel>
+          <InputLabel>Тестовый набор</InputLabel>
           <Select
             value={suiteId}
             label="Тестовый набор"
@@ -179,37 +197,37 @@ export default function CreateTestCase() {
         </FormControl>
 
         <FormControl sx={fieldSx}>
-          <InputLabel>Status</InputLabel>
+          <InputLabel>Статус</InputLabel>
           <Select value={status} label="Статус" onChange={(e) => setStatus(e.target.value)}>
-            {['DRAFT', 'ACTIVE', 'ARCHIVED'].map((val) => (
-              <MenuItem key={val} value={val}>
-                {val}
+            {statusOptions.map(({ value, label }) => (
+              <MenuItem key={value} value={value}>
+                {label}
               </MenuItem>
             ))}
           </Select>
         </FormControl>
 
         <FormControl sx={fieldSx}>
-          <InputLabel>Priority</InputLabel>
+          <InputLabel>Приоритет</InputLabel>
           <Select value={priority} label="Приоритет" onChange={(e) => setPriority(e.target.value)}>
-            {['LOW', 'MEDIUM', 'HIGH'].map((val) => (
-              <MenuItem key={val} value={val}>
-                {val}
+            {priorityOptions.map(({ value, label }) => (
+              <MenuItem key={value} value={value}>
+                {label}
               </MenuItem>
             ))}
           </Select>
         </FormControl>
 
         <FormControl sx={fieldSx}>
-          <InputLabel>Severity</InputLabel>
+          <InputLabel>Серьезность</InputLabel>
           <Select
             value={severity}
             label="Серьезность"
             onChange={(e) => setSeverity(e.target.value)}
           >
-            {['MINOR', 'MAJOR', 'CRITICAL'].map((val) => (
-              <MenuItem key={val} value={val}>
-                {val}
+            {severityOptions.map(({ value, label }) => (
+              <MenuItem key={value} value={value}>
+                {label}
               </MenuItem>
             ))}
           </Select>

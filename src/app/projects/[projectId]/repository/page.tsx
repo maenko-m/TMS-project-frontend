@@ -36,6 +36,7 @@ import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import RemoveIcon from '@mui/icons-material/Remove';
 import { gql } from '@apollo/client';
+import AppSnackbar from '@/components/atoms/AppSnackbar';
 
 const TEST_SUITES_QUERY = gql`
   query testSuitesByProjectId($projectId: UUID!) {
@@ -99,8 +100,9 @@ export default function RepositoryPage({ params }: { params: Promise<{ projectId
 
   const { data: suiteData, refetch: refetchSuites } = useQuery(TEST_SUITES_QUERY, {
     variables: { projectId },
+    fetchPolicy: 'network-only',
   });
-  const [fetchTestCases, { data: caseData }] = useLazyQuery(TEST_CASES_QUERY);
+  const [fetchTestCases, { data: caseData, refetch }] = useLazyQuery(TEST_CASES_QUERY);
   const [createTestSuite] = useMutation(CREATE_TEST_SUITE);
   const [updateTestSuite] = useMutation(UPDATE_TEST_SUITE);
   const [deleteTestSuite] = useMutation(DELETE_TEST_SUITE);
@@ -108,7 +110,11 @@ export default function RepositoryPage({ params }: { params: Promise<{ projectId
   const handleSelectSuite = (suite: any) => {
     setSelectedSuiteId(suite.id);
     setCurrentSuite(suite);
-    fetchTestCases({ variables: { projectId, filter: { suiteId: suite.id } } });
+    fetchTestCases({
+      variables: { projectId, filter: { suiteId: suite.id } },
+      fetchPolicy: 'network-only',
+    });
+    refetch();
   };
 
   const handleTestSuiteFormOpen = (suite: any = null) => {
@@ -147,7 +153,7 @@ export default function RepositoryPage({ params }: { params: Promise<{ projectId
     } else {
       await createTestSuite({ variables: { input } });
     }
-
+    showSnackbar('Успешно сохранено', 'success');
     refetchSuites();
     handleTestSuiteFormClose();
   };
@@ -158,6 +164,7 @@ export default function RepositoryPage({ params }: { params: Promise<{ projectId
       setSelectedSuiteId(null);
       setCurrentSuite(null);
       refetchSuites();
+      showSnackbar('Успешно удалено', 'success');
       setConfirmOpen(false);
     }
   };
@@ -204,6 +211,16 @@ export default function RepositoryPage({ params }: { params: Promise<{ projectId
     return map[severity as keyof typeof map];
   };
 
+  const [snackbar, setSnackbar] = React.useState({
+    open: false,
+    message: '',
+    severity: 'info' as 'success' | 'error' | 'info' | 'warning',
+  });
+
+  const showSnackbar = (message: string, severity: typeof snackbar.severity = 'info') => {
+    setSnackbar({ open: true, message, severity });
+  };
+
   return (
     <Box
       sx={{
@@ -214,6 +231,12 @@ export default function RepositoryPage({ params }: { params: Promise<{ projectId
         flexDirection: 'column',
       }}
     >
+      <AppSnackbar
+        open={snackbar.open}
+        message={snackbar.message}
+        severity={snackbar.severity}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+      />
       <Box sx={{ display: 'flex', gap: 1 }}>
         <Typography variant="h1">Репозиторий</Typography>
       </Box>

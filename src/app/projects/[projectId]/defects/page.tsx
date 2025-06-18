@@ -36,6 +36,7 @@ import InfoIcon from '@mui/icons-material/Info';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import { useRouter } from 'next/navigation';
+import AppSnackbar from '@/components/atoms/AppSnackbar';
 
 type Severity = 'CRITICAL' | 'MAJOR' | 'MINOR' | 'NORMAL' | 'TRIVIAL';
 
@@ -136,7 +137,7 @@ export default function DefectsPage({ params }: { params: Promise<{ projectId: s
   const defects: Defect[] = data?.defectsByProjectId.nodes || [];
 
   const openMenu = (e: React.MouseEvent, id: string) => {
-    setMenuAnchor(e.currentTarget as HTMLElement); // 👈 тут каст
+    setMenuAnchor(e.currentTarget as HTMLElement);
     setActiveId(id);
   };
   const closeMenu = () => {
@@ -151,7 +152,6 @@ export default function DefectsPage({ params }: { params: Promise<{ projectId: s
   };
 
   const handleDelete = async () => {
-    console.log(activeId);
     if (!activeId) return;
     await deleteDefect({ variables: { id: activeId } });
     setConfirmOpen(false);
@@ -205,11 +205,28 @@ export default function DefectsPage({ params }: { params: Promise<{ projectId: s
     setModalOpen(false);
     setFormData({ id: '', title: '', actualResult: '', severity: 'NORMAL' });
     setEditMode(false);
+    showSnackbar('Успешно сохранено', 'success');
     refetch();
+  };
+
+  const [snackbar, setSnackbar] = React.useState({
+    open: false,
+    message: '',
+    severity: 'info' as 'success' | 'error' | 'info' | 'warning',
+  });
+
+  const showSnackbar = (message: string, severity: typeof snackbar.severity = 'info') => {
+    setSnackbar({ open: true, message, severity });
   };
 
   return (
     <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <AppSnackbar
+        open={snackbar.open}
+        message={snackbar.message}
+        severity={snackbar.severity}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+      />
       <Typography variant="h1">Дефекты</Typography>
       <Box sx={{ display: 'flex', gap: 1 }}>
         <Button

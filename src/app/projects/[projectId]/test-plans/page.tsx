@@ -46,18 +46,24 @@ const USER_BY_ID = gql`
 export default function TestCasesPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = use(params);
   const router = useRouter();
+
   const [search, setSearch] = useState('');
 
-  const { data, loading, error } = useQuery(TEST_PLANS_BY_PROJECT_ID, {
+  const { data, loading, error, refetch } = useQuery(TEST_PLANS_BY_PROJECT_ID, {
     variables: {
       projectId,
       filter: search ? { name: search } : undefined,
+      fetchPolicy: 'network-only',
     },
   });
 
   if (error) return <Typography color="error">Ошибка: {error.message}</Typography>;
 
   const testPlans = data?.testPlansByProjectId?.nodes || [];
+
+  React.useEffect(() => {
+    refetch();
+  });
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', p: 3, gap: 3 }}>
